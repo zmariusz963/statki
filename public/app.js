@@ -253,7 +253,9 @@ let currentRotation = 0;
 let currentMirrored = false;
 let lastHoverX = null;
 let lastHoverY = null;
-let placedShips = [];
+let selectedIdx = 0;
+let placedByIndex = [];
+let placementOrder = [];
 let placedSet = new Set();
 let onPlacementReady = null;
 
@@ -266,31 +268,47 @@ function hasConflict(x, y) {
   return false;
 }
 
+function placedShipsList() {
+  return placedByIndex.filter(Boolean);
+}
+
+function firstUnplacedIndex() {
+  return placedByIndex.findIndex(s => !s);
+}
+
 function startPlacementUI(onReady) {
   showScreen('place');
-  placeShipIdx = 0;
   currentRotation = 0;
   currentMirrored = false;
   lastHoverX = null;
   lastHoverY = null;
-  placedShips = [];
+  selectedIdx = 0;
+  placedByIndex = new Array(SHIP_DEFS.length).fill(null);
+  placementOrder = [];
   placedSet = new Set();
   onPlacementReady = onReady;
-  document.getElementById('btn-ready').classList.add('hidden');
-  document.getElementById('btn-rotate').classList.remove('hidden');
-  document.getElementById('btn-mirror').classList.remove('hidden');
-  document.getElementById('btn-undo').classList.remove('hidden');
   document.getElementById('place-message').textContent = '';
+  refreshPlacementUI();
+}
+
+function refreshPlacementUI() {
   renderPlaceHint();
   renderShipsLegend();
   buildPlaceBoardUI();
+
+  const allPlaced = placedByIndex.every(Boolean);
+  const pending = !placedByIndex[selectedIdx];
+  document.getElementById('btn-ready').classList.toggle('hidden', !allPlaced);
+  document.getElementById('btn-rotate').classList.toggle('hidden', !pending);
+  document.getElementById('btn-mirror').classList.toggle('hidden', !pending);
+  document.getElementById('btn-undo').classList.toggle('hidden', placementOrder.length === 0);
 }
 
 function renderPlaceHint() {
-  if (placeShipIdx < SHIP_DEFS.length) {
-    document.getElementById('place-hint').textContent = `Ustaw: ${SHIP_DEFS[placeShipIdx].name}`;
+  if (!placedByIndex[selectedIdx]) {
+    document.getElementById('place-hint').textContent = `Ustaw: ${SHIP_DEFS[selectedIdx].name}`;
   } else {
-    document.getElementById('place-hint').textContent = 'Wszystkie statki rozstawione.';
+    document.getElementById('place-hint').textContent = 'Wszystkie statki rozstawione. Kliknij statek na liscie, aby go przestawic.';
   }
 }
 
@@ -300,11 +318,25 @@ function renderShipsLegend() {
   SHIP_DEFS.forEach((def, i) => {
     const item = document.createElement('div');
     item.className = 'ship-legend-item';
-    if (i < placeShipIdx) item.classList.add('placed');
-    if (i === placeShipIdx) item.classList.add('current');
+    if (placedByIndex[i]) item.classList.add('placed');
+    if (i === selectedIdx) item.classList.add('current');
     item.appendChild(renderLegendMini(def.shape));
+    item.onclick = () => selectShip(i);
     legend.appendChild(item);
   });
+}
+
+function selectShip(i) {
+  if (placedByIndex[i]) {
+    placedByIndex[i].cells.forEach(([x, y]) => placedSet.delete(`${x},${y}`));
+    placedByIndex[i] = null;
+    placementOrder = placementOrder.filter(idx => idx !== i);
+  }
+  selectedIdx = i;
+  currentRotation = 0;
+  currentMirrored = false;
+  document.getElementById('place-message').textContent = '';
+  refreshPlacementUI();
 }
 
 function clearPreview() {
@@ -316,8 +348,8 @@ function previewShip(x, y) {
   lastHoverX = x;
   lastHoverY = y;
   clearPreview();
-  if (placeShipIdx >= SHIP_DEFS.length) return;
-  const cells = shapeCells(x, y, SHIP_DEFS[placeShipIdx].shape, currentRotation, currentMirrored);
+  if (placedByIndex[selectedIdx]) return;
+  const cells = shapeCells(x, y, SHIP_DEFS[selectedIdx].shape, currentRotation, currentMirrored);
   const valid = cellsInBounds(cells) && cells.every(([cx, cy]) => !hasConflict(cx, cy));
   cells.forEach(([cx, cy]) => {
     if (cx < 0 || cx >= BOARD_SIZE || cy < 0 || cy >= BOARD_SIZE) return;
@@ -332,12 +364,12 @@ function buildPlaceBoardUI() {
     onHover: previewShip,
     onLeaveGrid: clearPreview,
   });
-  renderShipOverlays(grid, placedShips, () => false);
+  renderShipOverlays(grid, placedShipsList(), () => false);
 }
 
 function tryPlaceShip(x, y) {
-  if (placeShipIdx >= SHIP_DEFS.length) return;
-  const cells = shapeCells(x, y, SHIP_DEFS[placeShipIdx].shape, currentRotation, currentMirrored);
+  if (placedByIndex[selectedIdx]) return;
+  const cells = shapeCells(x, y, SHIP_DEFS[selectedIdx].shape, currentRotation, currentMirrored);
 
   if (!cellsInBounds(cells)) {
     document.getElementById('place-message').textContent = 'Statek nie miesci sie na planszy.';
@@ -349,21 +381,15 @@ function tryPlaceShip(x, y) {
   }
 
   cells.forEach(([cx, cy]) => placedSet.add(`${cx},${cy}`));
-  placedShips.push({ cells });
-  placeShipIdx++;
+  placedByIndex[selectedIdx] = { cells };
+  placementOrder.push(selectedIdx);
+  document.getElementById('place-message').textContent = '';
+
+  const next = firstUnplacedIndex();
+  if (next !== -1) selectedIdx = next;
   currentRotation = 0;
   currentMirrored = false;
-  document.getElementById('place-message').textContent = '';
-  renderShipsLegend();
-  buildPlaceBoardUI();
-  renderPlaceHint();
-
-  if (placeShipIdx >= SHIP_DEFS.length) {
-    document.getElementById('btn-ready').classList.remove('hidden');
-    document.getElementById('btn-rotate').classList.add('hidden');
-    document.getElementById('btn-mirror').classList.add('hidden');
-    document.getElementById('btn-undo').classList.add('hidden');
-  }
+  refreshPlacementUI();
 }
 
 document.getElementById('btn-rotate').onclick = () => {
@@ -377,19 +403,15 @@ document.getElementById('btn-mirror').onclick = () => {
 };
 
 document.getElementById('btn-undo').onclick = () => {
-  if (placedShips.length === 0) return;
-  const last = placedShips.pop();
-  last.cells.forEach(([x, y]) => placedSet.delete(`${x},${y}`));
-  placeShipIdx--;
+  if (placementOrder.length === 0) return;
+  const idx = placementOrder.pop();
+  placedByIndex[idx].cells.forEach(([x, y]) => placedSet.delete(`${x},${y}`));
+  placedByIndex[idx] = null;
+  selectedIdx = idx;
   currentRotation = 0;
   currentMirrored = false;
-  document.getElementById('btn-ready').classList.add('hidden');
-  document.getElementById('btn-rotate').classList.remove('hidden');
-  document.getElementById('btn-mirror').classList.remove('hidden');
   document.getElementById('place-message').textContent = '';
-  renderPlaceHint();
-  renderShipsLegend();
-  buildPlaceBoardUI();
+  refreshPlacementUI();
 };
 
 document.getElementById('btn-ready').onclick = () => {
