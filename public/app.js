@@ -645,6 +645,10 @@ function applyOnlineFireResult(msg) {
 
   if (msg.gameOver) {
     document.getElementById('game-message').textContent = iFired ? 'Wygrywasz! Wszystkie statki przeciwnika zatopione.' : 'Przegrywasz! Twoja flota zatopiona.';
+  } else if (msg.hit) {
+    document.getElementById('game-message').textContent = iFired ? 'Trafienie! Strzelasz jeszcze raz.' : 'Przeciwnik trafil i strzela dalej.';
+  } else {
+    document.getElementById('game-message').textContent = iFired ? 'Pudlo.' : 'Przeciwnik nie trafil.';
   }
 }
 
@@ -736,10 +740,12 @@ function fireLocal(x, y, shooter, target) {
   const shipJustSunk = isHit && shipFullySunkLocal(target, hitShip);
   const allSunk = local.ships[target].every(s => shipFullySunkLocal(target, s));
 
+  const continuesTurn = isHit && !allSunk;
+
   const enemyGrid = buildBoard('enemy-board', {
     getCellClass: (cx, cy) => [local.hits[target].has(`${cx},${cy}`) ? cellStateLocal(target, cx, cy) : null],
     getCellContent: (cx, cy) => local.hits[target].has(`${cx},${cy}`) ? symbolForState(cellStateLocal(target, cx, cy)) : '',
-    onClick: () => {},
+    onClick: continuesTurn ? (cx, cy) => fireLocal(cx, cy, shooter, target) : () => {},
   });
   const sunkTargetShips = local.ships[target].filter(ship => shipFullySunkLocal(target, ship));
   renderShipOverlays(enemyGrid, sunkTargetShips, () => true);
@@ -750,15 +756,18 @@ function fireLocal(x, y, shooter, target) {
     spawnSinkBurst(enemyGrid, cx, cy);
   }
 
-  document.getElementById('game-message').textContent = isHit
-    ? (allSunk ? 'Zatopiony ostatni statek!' : (shipJustSunk ? 'Zatopiony!' : 'Trafienie!'))
-    : 'Pudlo.';
-
   if (allSunk) {
+    document.getElementById('game-message').textContent = 'Zatopiony ostatni statek!';
     document.getElementById('turn-indicator').textContent = `Gracz ${shooter + 1} wygrywa!`;
     return;
   }
 
+  if (isHit) {
+    document.getElementById('game-message').textContent = shipJustSunk ? 'Zatopiony! Strzelasz jeszcze raz.' : 'Trafienie! Strzelasz jeszcze raz.';
+    return;
+  }
+
+  document.getElementById('game-message').textContent = 'Pudlo.';
   local.turn = target;
   setTimeout(() => {
     showPass(`Przekaz telefon graczowi ${target + 1}`, `Gracz ${target + 1}, kliknij Dalej gdy telefon jest u Ciebie.`, () => {

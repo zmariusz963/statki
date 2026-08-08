@@ -157,7 +157,7 @@ wss.on('connection', (ws) => {
       }
 
       const allSunk = checkAllSunk(targetShips, room.hits[targetIdx]);
-      if (!allSunk) room.turn = targetIdx;
+      if (!allSunk && !isHit) room.turn = targetIdx;
 
       const resultMsg = {
         type: 'fire_result',
