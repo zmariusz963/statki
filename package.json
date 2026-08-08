@@ -1,0 +1,12 @@
+{
+  "name": "statki",
+  "version": "1.0.0",
+  "description": "Gra w statki dla dwoch graczy przez WebSocket",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

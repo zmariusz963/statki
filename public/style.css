@@ -1,0 +1,172 @@
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: #0f1720;
+  color: #e8edf2;
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  padding: 16px;
+}
+
+.screen {
+  width: 100%;
+  max-width: 480px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 10px;
+}
+
+.hidden {
+  display: none !important;
+}
+
+h1 {
+  font-size: 26px;
+  font-weight: 600;
+  margin: 8px 0;
+}
+
+h2, h3 {
+  font-weight: 500;
+  margin: 4px 0;
+}
+
+button {
+  background: #1d9e75;
+  color: white;
+  border: none;
+  border-radius: 10px;
+  padding: 14px 20px;
+  font-size: 16px;
+  font-weight: 500;
+  width: 100%;
+  max-width: 300px;
+  cursor: pointer;
+}
+
+button:active {
+  transform: scale(0.98);
+}
+
+button:disabled {
+  background: #3a4550;
+  cursor: not-allowed;
+}
+
+#btn-rotate {
+  background: #378add;
+  max-width: 200px;
+}
+
+.divider {
+  color: #7a8a99;
+  font-size: 13px;
+  margin: 4px 0;
+}
+
+input {
+  width: 100%;
+  max-width: 300px;
+  padding: 14px;
+  font-size: 18px;
+  border-radius: 10px;
+  border: 1px solid #33404d;
+  background: #17212b;
+  color: #e8edf2;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+
+.message {
+  min-height: 20px;
+  font-size: 14px;
+  color: #e2955a;
+}
+
+.hint {
+  font-size: 13px;
+  color: #93a3b0;
+}
+
+.room-code {
+  font-size: 40px;
+  font-weight: 600;
+  letter-spacing: 6px;
+  background: #17212b;
+  padding: 12px 24px;
+  border-radius: 12px;
+  border: 1px solid #33404d;
+}
+
+.board {
+  display: grid;
+  grid-template-columns: repeat(10, 1fr);
+  grid-template-rows: repeat(10, 1fr);
+  width: 100%;
+  max-width: 340px;
+  aspect-ratio: 1;
+  gap: 2px;
+  background: #17212b;
+  padding: 4px;
+  border-radius: 8px;
+  border: 1px solid #33404d;
+}
+
+.board-small {
+  max-width: 220px;
+}
+
+.cell {
+  background: #1c2b38;
+  border-radius: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cell.ship {
+  background: #4a5a68;
+}
+
+.cell.hit {
+  background: #d85a30;
+}
+
+.cell.miss {
+  background: #2a3a48;
+}
+
+.cell.sunk {
+  background: #993c1d;
+}
+
+.boards-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  align-items: center;
+}
+
+.board-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+
+.turn-indicator {
+  font-size: 16px;
+  font-weight: 500;
+  min-height: 20px;
+}

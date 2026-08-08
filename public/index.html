@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Statki</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<div id="screen-lobby" class="screen">
+  <h1>Statki</h1>
+  <button id="btn-create">Stworz pokoj</button>
+  <div class="divider">albo</div>
+  <input id="input-code" placeholder="Kod pokoju" maxlength="4" autocapitalize="characters" />
+  <button id="btn-join">Dolacz do pokoju</button>
+  <p id="lobby-message" class="message"></p>
+</div>
+
+<div id="screen-waiting" class="screen hidden">
+  <h1>Pokoj utworzony</h1>
+  <p>Podaj ten kod drugiemu graczowi:</p>
+  <div id="room-code" class="room-code"></div>
+  <p class="hint">Czekam na dolaczenie gracza...</p>
+</div>
+
+<div id="screen-place" class="screen hidden">
+  <h2>Rozstaw swoje statki</h2>
+  <p id="place-hint" class="hint"></p>
+  <button id="btn-rotate">Obroc statek</button>
+  <div id="place-board" class="board"></div>
+  <button id="btn-ready" class="hidden">Gotowy</button>
+  <p id="place-message" class="message"></p>
+</div>
+
+<div id="screen-game" class="screen hidden">
+  <p id="turn-indicator" class="turn-indicator"></p>
+  <div class="boards-wrap">
+    <div class="board-col">
+      <h3>Przeciwnik</h3>
+      <div id="enemy-board" class="board"></div>
+    </div>
+    <div class="board-col">
+      <h3>Ty</h3>
+      <div id="own-board" class="board board-small"></div>
+    </div>
+  </div>
+  <p id="game-message" class="message"></p>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
