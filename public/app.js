@@ -142,14 +142,10 @@ function renderShipsLegend() {
     item.className = 'ship-legend-item';
     if (i < placeShipIdx) item.classList.add('placed');
     if (i === placeShipIdx) item.classList.add('current');
-    const squares = document.createElement('div');
-    squares.className = 'ship-legend-squares';
-    for (let s = 0; s < size; s++) {
-      const sq = document.createElement('div');
-      sq.className = 'ship-legend-square';
-      squares.appendChild(sq);
-    }
-    item.appendChild(squares);
+    const boat = document.createElement('div');
+    boat.className = 'ship-legend-boat';
+    boat.style.width = `${size * 14}px`;
+    item.appendChild(boat);
     legend.appendChild(item);
   });
 }

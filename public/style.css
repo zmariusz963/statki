@@ -298,18 +298,24 @@ input {
   opacity: 0.3;
 }
 
-.ship-legend-squares {
-  display: flex;
-  gap: 2px;
-}
-
-.ship-legend-square {
-  width: 12px;
-  height: 9px;
+.ship-legend-boat {
+  height: 16px;
   background: #4a5a68;
-  border-radius: 1px;
+  clip-path: polygon(10% 0%, 90% 0%, 100% 50%, 90% 100%, 10% 100%, 0% 50%);
+  position: relative;
 }
 
-.ship-legend-item.current .ship-legend-square {
+.ship-legend-boat::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 12%;
+  right: 12%;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.25);
+  transform: translateY(-50%);
+}
+
+.ship-legend-item.current .ship-legend-boat {
   background: #1d9e75;
 }
