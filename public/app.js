@@ -1,6 +1,13 @@
 const BOARD_SIZE = 10;
-const SHIP_SIZES = [5, 4, 3, 3, 2];
-const SHIP_NAMES = ['Krazownik (5)', 'Pancernik (4)', 'Fregata (3)', 'Fregata (3)', 'Niszczyciel (2)'];
+
+const SHIP_DEFS = [
+  { name: 'Krazownik (5)', shape: [[0, 0], [1, 0], [2, 0], [3, 0], [4, 0]] },
+  { name: 'Pancernik (4)', shape: [[0, 0], [1, 0], [2, 0], [3, 0]] },
+  { name: 'Niszczyciel L (4)', shape: [[0, 0], [0, 1], [0, 2], [1, 2]] },
+  { name: 'Fregata (3)', shape: [[0, 0], [1, 0], [2, 0]] },
+  { name: 'Torpedowiec (2)', shape: [[0, 0], [1, 0]] },
+  { name: 'Lodz (1)', shape: [[0, 0]] },
+];
 
 const screens = {
   lobby: document.getElementById('screen-lobby'),
@@ -25,6 +32,156 @@ function symbolForState(state) {
   if (state === 'sunk') return '☒';
   return '';
 }
+
+// ---------- Shape / rotation math ----------
+
+function rotateOffset([dx, dy], rotation) {
+  switch (rotation % 4) {
+    case 1: return [-dy, dx];
+    case 2: return [-dx, -dy];
+    case 3: return [dy, -dx];
+    default: return [dx, dy];
+  }
+}
+
+function shapeCells(anchorX, anchorY, shape, rotation) {
+  const rotated = shape.map(off => rotateOffset(off, rotation));
+  const minDx = Math.min(...rotated.map(c => c[0]));
+  const minDy = Math.min(...rotated.map(c => c[1]));
+  return rotated.map(([dx, dy]) => [anchorX + dx - minDx, anchorY + dy - minDy]);
+}
+
+function cellsInBounds(cells) {
+  return cells.every(([x, y]) => x >= 0 && x < BOARD_SIZE && y >= 0 && y < BOARD_SIZE);
+}
+
+function shapeBoundingBox(shape) {
+  const xs = shape.map(c => c[0]);
+  const ys = shape.map(c => c[1]);
+  return {
+    w: Math.max(...xs) - Math.min(...xs) + 1,
+    h: Math.max(...ys) - Math.min(...ys) + 1,
+    minX: Math.min(...xs),
+    minY: Math.min(...ys),
+  };
+}
+
+function isStraightLine(cells) {
+  if (cells.length <= 1) return false;
+  const allSameY = cells.every(([, y]) => y === cells[0][1]);
+  const allSameX = cells.every(([x]) => x === cells[0][0]);
+  return allSameY || allSameX;
+}
+
+function shipCenterPercent(cells) {
+  const xs = cells.map(c => c[0]), ys = cells.map(c => c[1]);
+  const minX = Math.min(...xs), maxX = Math.max(...xs);
+  const minY = Math.min(...ys), maxY = Math.max(...ys);
+  return { cx: (minX + maxX + 1) / 2 * 10, cy: (minY + maxY + 1) / 2 * 10 };
+}
+
+// ---------- Ship graphics ----------
+
+function shipSVGMarkup(size, horizontal) {
+  const len = size * 40;
+  const w = horizontal ? len : 40;
+  const h = horizontal ? 40 : len;
+  const turretCount = size - 1;
+  let turrets = '';
+  for (let i = 0; i < turretCount; i++) {
+    const t = (i + 1) / (turretCount + 1);
+    const cx = horizontal ? len * t : 20;
+    const cy = horizontal ? 20 : len * t;
+    turrets += `<circle cx="${cx}" cy="${cy}" r="5" class="ship-turret" />`;
+  }
+  const hullPoints = horizontal
+    ? `4,20 14,6 ${len - 14},6 ${len - 4},20 ${len - 14},34 14,34`
+    : `20,4 34,14 34,${len - 14} 20,${len - 4} 6,${len - 14} 6,14`;
+  return `<svg viewBox="0 0 ${w} ${h}" class="ship-svg" preserveAspectRatio="none">
+    <polygon points="${hullPoints}" class="ship-hull" />
+    ${turrets}
+  </svg>`;
+}
+
+function renderShipOverlays(gridEl, ships, isSunkFn) {
+  gridEl.querySelectorAll('.ship-overlay').forEach(el => el.remove());
+  ships.forEach(ship => {
+    const cells = ship.cells;
+    const sunk = isSunkFn ? isSunkFn(ship) : false;
+
+    if (cells.length === 1) {
+      const [x, y] = cells[0];
+      const el = document.createElement('div');
+      el.className = 'ship-overlay' + (sunk ? ' sunk' : '');
+      el.style.left = `${x * 10}%`;
+      el.style.top = `${y * 10}%`;
+      el.style.width = '10%';
+      el.style.height = '10%';
+      el.innerHTML = '<div class="ship-single-dot"></div>';
+      gridEl.appendChild(el);
+    } else if (isStraightLine(cells)) {
+      const xs = cells.map(c => c[0]), ys = cells.map(c => c[1]);
+      const minX = Math.min(...xs), maxX = Math.max(...xs);
+      const minY = Math.min(...ys), maxY = Math.max(...ys);
+      const horizontal = (maxX - minX) >= (maxY - minY);
+      const el = document.createElement('div');
+      el.className = 'ship-overlay' + (sunk ? ' sunk' : '');
+      el.style.left = `${minX * 10}%`;
+      el.style.top = `${minY * 10}%`;
+      el.style.width = `${(maxX - minX + 1) * 10}%`;
+      el.style.height = `${(maxY - minY + 1) * 10}%`;
+      el.innerHTML = shipSVGMarkup(cells.length, horizontal);
+      gridEl.appendChild(el);
+    } else {
+      cells.forEach(([x, y]) => {
+        const seg = document.createElement('div');
+        seg.className = 'ship-overlay ship-segment' + (sunk ? ' sunk' : '');
+        seg.style.left = `${x * 10}%`;
+        seg.style.top = `${y * 10}%`;
+        seg.style.width = '10%';
+        seg.style.height = '10%';
+        seg.innerHTML = '<div class="seg-inner"></div>';
+        gridEl.appendChild(seg);
+      });
+    }
+  });
+}
+
+function spawnSinkBurst(gridEl, cxPercent, cyPercent) {
+  if (!gridEl) return;
+  const burst = document.createElement('div');
+  burst.className = 'sink-burst';
+  burst.style.left = `${cxPercent}%`;
+  burst.style.top = `${cyPercent}%`;
+  const count = 10;
+  for (let i = 0; i < count; i++) {
+    const p = document.createElement('div');
+    p.className = 'sink-burst-particle';
+    p.style.setProperty('--angle', `${(360 / count) * i}deg`);
+    burst.appendChild(p);
+  }
+  gridEl.appendChild(burst);
+  setTimeout(() => burst.remove(), 700);
+}
+
+function renderLegendMini(shape, extraClass) {
+  const { w, h, minX, minY } = shapeBoundingBox(shape);
+  const wrap = document.createElement('div');
+  wrap.className = 'ship-legend-mini' + (extraClass ? ' ' + extraClass : '');
+  wrap.style.gridTemplateColumns = `repeat(${w}, 9px)`;
+  wrap.style.gridTemplateRows = `repeat(${h}, 9px)`;
+  const filled = new Set(shape.map(([x, y]) => `${x - minX},${y - minY}`));
+  for (let yy = 0; yy < h; yy++) {
+    for (let xx = 0; xx < w; xx++) {
+      const cell = document.createElement('div');
+      cell.className = 'ship-legend-mini-cell' + (filled.has(`${xx},${yy}`) ? ' filled' : '');
+      wrap.appendChild(cell);
+    }
+  }
+  return wrap;
+}
+
+// ---------- Generic board builder ----------
 
 function buildBoard(containerId, opts) {
   const container = document.getElementById(containerId);
@@ -74,6 +231,7 @@ function buildBoard(containerId, opts) {
   }
   if (opts.onLeaveGrid) grid.addEventListener('mouseleave', opts.onLeaveGrid);
   container.appendChild(grid);
+  return grid;
 }
 
 function triggerCellAnimation(containerId, x, y, hit) {
@@ -85,7 +243,9 @@ function triggerCellAnimation(containerId, x, y, hit) {
 // ---------- Placement (shared between online and local) ----------
 
 let placeShipIdx = 0;
-let horizontal = true;
+let currentRotation = 0;
+let lastHoverX = null;
+let lastHoverY = null;
 let placedShips = [];
 let placedSet = new Set();
 let onPlacementReady = null;
@@ -99,23 +259,14 @@ function hasConflict(x, y) {
   return false;
 }
 
-function shipCandidateCells(x, y, size) {
-  const cells = [];
-  for (let i = 0; i < size; i++) {
-    const cx = horizontal ? x + i : x;
-    const cy = horizontal ? y : y + i;
-    if (cx >= BOARD_SIZE || cy >= BOARD_SIZE) return null;
-    cells.push([cx, cy]);
-  }
-  return cells;
-}
-
 function startPlacementUI(onReady) {
   showScreen('place');
   placeShipIdx = 0;
+  currentRotation = 0;
+  lastHoverX = null;
+  lastHoverY = null;
   placedShips = [];
   placedSet = new Set();
-  horizontal = true;
   onPlacementReady = onReady;
   document.getElementById('btn-ready').classList.add('hidden');
   document.getElementById('btn-rotate').classList.remove('hidden');
@@ -127,8 +278,8 @@ function startPlacementUI(onReady) {
 }
 
 function renderPlaceHint() {
-  if (placeShipIdx < SHIP_SIZES.length) {
-    document.getElementById('place-hint').textContent = `Ustaw: ${SHIP_NAMES[placeShipIdx]}`;
+  if (placeShipIdx < SHIP_DEFS.length) {
+    document.getElementById('place-hint').textContent = `Ustaw: ${SHIP_DEFS[placeShipIdx].name}`;
   } else {
     document.getElementById('place-hint').textContent = 'Wszystkie statki rozstawione.';
   }
@@ -137,15 +288,12 @@ function renderPlaceHint() {
 function renderShipsLegend() {
   const legend = document.getElementById('ships-legend');
   legend.innerHTML = '';
-  SHIP_SIZES.forEach((size, i) => {
+  SHIP_DEFS.forEach((def, i) => {
     const item = document.createElement('div');
     item.className = 'ship-legend-item';
     if (i < placeShipIdx) item.classList.add('placed');
     if (i === placeShipIdx) item.classList.add('current');
-    const boat = document.createElement('div');
-    boat.className = 'ship-legend-boat';
-    boat.style.width = `${size * 14}px`;
-    item.appendChild(boat);
+    item.appendChild(renderLegendMini(def.shape));
     legend.appendChild(item);
   });
 }
@@ -156,33 +304,33 @@ function clearPreview() {
 }
 
 function previewShip(x, y) {
+  lastHoverX = x;
+  lastHoverY = y;
   clearPreview();
-  if (placeShipIdx >= SHIP_SIZES.length) return;
-  const size = SHIP_SIZES[placeShipIdx];
-  const cells = shipCandidateCells(x, y, size);
-  const valid = cells !== null && cells.every(([cx, cy]) => !hasConflict(cx, cy));
-  if (!cells) return;
+  if (placeShipIdx >= SHIP_DEFS.length) return;
+  const cells = shapeCells(x, y, SHIP_DEFS[placeShipIdx].shape, currentRotation);
+  const valid = cellsInBounds(cells) && cells.every(([cx, cy]) => !hasConflict(cx, cy));
   cells.forEach(([cx, cy]) => {
+    if (cx < 0 || cx >= BOARD_SIZE || cy < 0 || cy >= BOARD_SIZE) return;
     const el = document.querySelector(`#place-board .grid .cell[data-x="${cx}"][data-y="${cy}"]`);
     if (el) el.classList.add(valid ? 'preview-valid' : 'preview-invalid');
   });
 }
 
 function buildPlaceBoardUI() {
-  buildBoard('place-board', {
-    getCellClass: (x, y) => [placedSet.has(`${x},${y}`) ? 'ship' : null],
+  const grid = buildBoard('place-board', {
     onClick: tryPlaceShip,
     onHover: previewShip,
     onLeaveGrid: clearPreview,
   });
+  renderShipOverlays(grid, placedShips, () => false);
 }
 
 function tryPlaceShip(x, y) {
-  if (placeShipIdx >= SHIP_SIZES.length) return;
-  const size = SHIP_SIZES[placeShipIdx];
-  const cells = shipCandidateCells(x, y, size);
+  if (placeShipIdx >= SHIP_DEFS.length) return;
+  const cells = shapeCells(x, y, SHIP_DEFS[placeShipIdx].shape, currentRotation);
 
-  if (!cells) {
+  if (!cellsInBounds(cells)) {
     document.getElementById('place-message').textContent = 'Statek nie miesci sie na planszy.';
     return;
   }
@@ -194,12 +342,13 @@ function tryPlaceShip(x, y) {
   cells.forEach(([cx, cy]) => placedSet.add(`${cx},${cy}`));
   placedShips.push({ cells });
   placeShipIdx++;
+  currentRotation = 0;
   document.getElementById('place-message').textContent = '';
   renderShipsLegend();
   buildPlaceBoardUI();
   renderPlaceHint();
 
-  if (placeShipIdx >= SHIP_SIZES.length) {
+  if (placeShipIdx >= SHIP_DEFS.length) {
     document.getElementById('btn-ready').classList.remove('hidden');
     document.getElementById('btn-rotate').classList.add('hidden');
     document.getElementById('btn-undo').classList.add('hidden');
@@ -207,7 +356,8 @@ function tryPlaceShip(x, y) {
 }
 
 document.getElementById('btn-rotate').onclick = () => {
-  horizontal = !horizontal;
+  currentRotation = (currentRotation + 1) % 4;
+  if (lastHoverX !== null) previewShip(lastHoverX, lastHoverY);
 };
 
 document.getElementById('btn-undo').onclick = () => {
@@ -215,6 +365,7 @@ document.getElementById('btn-undo').onclick = () => {
   const last = placedShips.pop();
   last.cells.forEach(([x, y]) => placedSet.delete(`${x},${y}`));
   placeShipIdx--;
+  currentRotation = 0;
   document.getElementById('btn-ready').classList.add('hidden');
   document.getElementById('btn-rotate').classList.remove('hidden');
   document.getElementById('place-message').textContent = '';
@@ -235,6 +386,7 @@ let roomCode = null;
 let myTurn = false;
 let enemyHits = {};
 let ownHits = {};
+let sunkEnemyShips = [];
 
 function connect() {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
@@ -302,6 +454,7 @@ function startOnlineGame() {
   showScreen('game');
   enemyHits = {};
   ownHits = {};
+  sunkEnemyShips = [];
   buildEnemyBoardOnline();
   buildOwnBoardOnline();
   updateTurnIndicator();
@@ -312,19 +465,21 @@ function updateTurnIndicator() {
 }
 
 function buildEnemyBoardOnline() {
-  buildBoard('enemy-board', {
+  const grid = buildBoard('enemy-board', {
     getCellClass: (x, y) => [enemyHits[`${x},${y}`] || null],
     getCellContent: (x, y) => symbolForState(enemyHits[`${x},${y}`]),
     onClick: fireOnline,
   });
+  renderShipOverlays(grid, sunkEnemyShips, () => true);
 }
 
 function buildOwnBoardOnline() {
-  buildBoard('own-board', {
+  const grid = buildBoard('own-board', {
     small: true,
-    getCellClass: (x, y) => [placedSet.has(`${x},${y}`) ? 'ship' : null, ownHits[`${x},${y}`] || null],
+    getCellClass: (x, y) => [ownHits[`${x},${y}`] || null],
     getCellContent: (x, y) => symbolForState(ownHits[`${x},${y}`]),
   });
+  renderShipOverlays(grid, placedShips, (ship) => ship.cells.every(([x, y]) => ownHits[`${x},${y}`] === 'sunk'));
 }
 
 function fireOnline(x, y) {
@@ -344,11 +499,17 @@ function applyOnlineFireResult(msg) {
     msg.sunkCells.forEach(([sx, sy]) => {
       targetHits[`${sx},${sy}`] = 'sunk';
     });
+    if (iFired) sunkEnemyShips.push({ cells: msg.sunkCells });
   }
 
   buildEnemyBoardOnline();
   buildOwnBoardOnline();
   triggerCellAnimation(iFired ? 'enemy-board' : 'own-board', msg.x, msg.y, msg.hit);
+
+  if (msg.sunk && msg.sunkCells) {
+    const { cx, cy } = shipCenterPercent(msg.sunkCells);
+    spawnSinkBurst(document.querySelector(`#${iFired ? 'enemy-board' : 'own-board'} .grid`), cx, cy);
+  }
 
   myTurn = msg.nextTurn === playerIdx;
   updateTurnIndicator();
@@ -399,31 +560,6 @@ function showPass(title, message, onContinue) {
   document.getElementById('btn-pass-continue').onclick = onContinue;
 }
 
-function startLocalTurn() {
-  showScreen('game');
-  document.getElementById('game-message').textContent = '';
-  document.getElementById('turn-indicator').textContent = `Gracz ${local.turn + 1} - Twoja tura, strzelaj!`;
-
-  const shooter = local.turn;
-  const target = shooter === 0 ? 1 : 0;
-
-  buildBoard('enemy-board', {
-    getCellClass: (x, y) => [local.hits[target].has(`${x},${y}`) ? cellStateLocal(target, x, y) : null],
-    getCellContent: (x, y) => local.hits[target].has(`${x},${y}`) ? symbolForState(cellStateLocal(target, x, y)) : '',
-    onClick: (x, y) => fireLocal(x, y, shooter, target),
-  });
-
-  buildBoard('own-board', {
-    small: true,
-    getCellClass: (x, y) => {
-      const isShip = local.ships[shooter].some(s => s.cells.some(([sx, sy]) => sx === x && sy === y));
-      const state = local.hits[shooter].has(`${x},${y}`) ? cellStateLocal(shooter, x, y) : null;
-      return [isShip ? 'ship' : null, state];
-    },
-    getCellContent: (x, y) => local.hits[shooter].has(`${x},${y}`) ? symbolForState(cellStateLocal(shooter, x, y)) : '',
-  });
-}
-
 function cellStateLocal(targetPlayerIdx, x, y) {
   const key = `${x},${y}`;
   if (!local.hits[targetPlayerIdx].has(key)) return null;
@@ -433,6 +569,34 @@ function cellStateLocal(targetPlayerIdx, x, y) {
   return sunk ? 'sunk' : 'hit';
 }
 
+function shipFullySunkLocal(targetPlayerIdx, ship) {
+  return ship.cells.every(([x, y]) => local.hits[targetPlayerIdx].has(`${x},${y}`));
+}
+
+function startLocalTurn() {
+  showScreen('game');
+  document.getElementById('game-message').textContent = '';
+  document.getElementById('turn-indicator').textContent = `Gracz ${local.turn + 1} - Twoja tura, strzelaj!`;
+
+  const shooter = local.turn;
+  const target = shooter === 0 ? 1 : 0;
+
+  const enemyGrid = buildBoard('enemy-board', {
+    getCellClass: (x, y) => [local.hits[target].has(`${x},${y}`) ? cellStateLocal(target, x, y) : null],
+    getCellContent: (x, y) => local.hits[target].has(`${x},${y}`) ? symbolForState(cellStateLocal(target, x, y)) : '',
+    onClick: (x, y) => fireLocal(x, y, shooter, target),
+  });
+  const sunkTargetShips = local.ships[target].filter(ship => shipFullySunkLocal(target, ship));
+  renderShipOverlays(enemyGrid, sunkTargetShips, () => true);
+
+  const ownGrid = buildBoard('own-board', {
+    small: true,
+    getCellClass: (x, y) => [local.hits[shooter].has(`${x},${y}`) ? cellStateLocal(shooter, x, y) : null],
+    getCellContent: (x, y) => local.hits[shooter].has(`${x},${y}`) ? symbolForState(cellStateLocal(shooter, x, y)) : '',
+  });
+  renderShipOverlays(ownGrid, local.ships[shooter], (ship) => shipFullySunkLocal(shooter, ship));
+}
+
 function fireLocal(x, y, shooter, target) {
   const key = `${x},${y}`;
   if (local.hits[target].has(key)) return;
@@ -440,17 +604,25 @@ function fireLocal(x, y, shooter, target) {
   local.hits[target].add(key);
   const hitShip = local.ships[target].find(s => s.cells.some(([sx, sy]) => sx === x && sy === y));
   const isHit = !!hitShip;
-  const allSunk = local.ships[target].every(s => s.cells.every(([sx, sy]) => local.hits[target].has(`${sx},${sy}`)));
+  const shipJustSunk = isHit && shipFullySunkLocal(target, hitShip);
+  const allSunk = local.ships[target].every(s => shipFullySunkLocal(target, s));
 
-  buildBoard('enemy-board', {
+  const enemyGrid = buildBoard('enemy-board', {
     getCellClass: (cx, cy) => [local.hits[target].has(`${cx},${cy}`) ? cellStateLocal(target, cx, cy) : null],
     getCellContent: (cx, cy) => local.hits[target].has(`${cx},${cy}`) ? symbolForState(cellStateLocal(target, cx, cy)) : '',
     onClick: () => {},
   });
+  const sunkTargetShips = local.ships[target].filter(ship => shipFullySunkLocal(target, ship));
+  renderShipOverlays(enemyGrid, sunkTargetShips, () => true);
   triggerCellAnimation('enemy-board', x, y, isHit);
 
+  if (shipJustSunk) {
+    const { cx, cy } = shipCenterPercent(hitShip.cells);
+    spawnSinkBurst(enemyGrid, cx, cy);
+  }
+
   document.getElementById('game-message').textContent = isHit
-    ? (allSunk ? 'Zatopiony ostatni statek!' : 'Trafienie!')
+    ? (allSunk ? 'Zatopiony ostatni statek!' : (shipJustSunk ? 'Zatopiony!' : 'Trafienie!'))
     : 'Pudlo.';
 
   if (allSunk) {
