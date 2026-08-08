@@ -304,7 +304,6 @@ document.getElementById('btn-join').onclick = () => {
 
 function startOnlineGame() {
   showScreen('game');
-  document.getElementById('btn-pass-turn').classList.add('hidden');
   enemyHits = {};
   ownHits = {};
   buildEnemyBoardOnline();
@@ -407,7 +406,6 @@ function showPass(title, message, onContinue) {
 function startLocalTurn() {
   showScreen('game');
   document.getElementById('game-message').textContent = '';
-  document.getElementById('btn-pass-turn').classList.add('hidden');
   document.getElementById('turn-indicator').textContent = `Gracz ${local.turn + 1} - Twoja tura, strzelaj!`;
 
   const shooter = local.turn;
@@ -461,16 +459,13 @@ function fireLocal(x, y, shooter, target) {
 
   if (allSunk) {
     document.getElementById('turn-indicator').textContent = `Gracz ${shooter + 1} wygrywa!`;
-    document.getElementById('btn-pass-turn').classList.add('hidden');
     return;
   }
 
   local.turn = target;
-  const passBtn = document.getElementById('btn-pass-turn');
-  passBtn.classList.remove('hidden');
-  passBtn.onclick = () => {
+  setTimeout(() => {
     showPass(`Przekaz telefon graczowi ${target + 1}`, `Gracz ${target + 1}, kliknij Dalej gdy telefon jest u Ciebie.`, () => {
       startLocalTurn();
     });
-  };
+  }, 1200);
 }
