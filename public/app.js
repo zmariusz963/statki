@@ -1,15 +1,15 @@
 const BOARD_SIZE = 10;
 
 const SHIP_DEFS = [
-  { name: 'Krazownik (5)', shape: [[0, 0], [1, 0], [2, 0], [3, 0], [4, 0]] },
-  { name: 'Pancernik (4)', shape: [[0, 0], [1, 0], [2, 0], [3, 0]] },
-  { name: 'Niszczyciel L (4)', shape: [[0, 0], [0, 1], [0, 2], [1, 2]] },
+  { name: 'Krazownik (5)', shape: [[0, 0], [1, 0], [2, 0], [3, 0], [4, 0]], freeform: true },
+  { name: 'Pancernik (4)', shape: [[0, 0], [1, 0], [2, 0], [3, 0]], freeform: true },
+  { name: 'Niszczyciel L (4)', shape: [[0, 0], [0, 1], [0, 2], [1, 2]], freeform: true },
   { name: 'Fregata (3)', shape: [[0, 0], [1, 0], [2, 0]], freeform: true },
-  { name: 'Korweta (3)', shape: [[0, 0], [1, 0], [2, 0]] },
-  { name: 'Torpedowiec (2)', shape: [[0, 0], [1, 0]] },
-  { name: 'Kuter (2)', shape: [[0, 0], [1, 0]] },
-  { name: 'Lodz (1)', shape: [[0, 0]] },
-  { name: 'Boja (1)', shape: [[0, 0]] },
+  { name: 'Korweta (3)', shape: [[0, 0], [1, 0], [2, 0]], freeform: true },
+  { name: 'Torpedowiec (2)', shape: [[0, 0], [1, 0]], freeform: true },
+  { name: 'Kuter (2)', shape: [[0, 0], [1, 0]], freeform: true },
+  { name: 'Lodz (1)', shape: [[0, 0]], freeform: true },
+  { name: 'Boja (1)', shape: [[0, 0]], freeform: true },
 ];
 
 const screens = {
