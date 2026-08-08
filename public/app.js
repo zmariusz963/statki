@@ -170,7 +170,24 @@ function spawnSinkBurst(gridEl, cxPercent, cyPercent) {
     burst.appendChild(p);
   }
   gridEl.appendChild(burst);
-  setTimeout(() => burst.remove(), 700);
+
+  const wave1 = document.createElement('div');
+  wave1.className = 'sink-wave';
+  wave1.style.left = `${cxPercent}%`;
+  wave1.style.top = `${cyPercent}%`;
+  gridEl.appendChild(wave1);
+
+  const wave2 = document.createElement('div');
+  wave2.className = 'sink-wave sink-wave-delayed';
+  wave2.style.left = `${cxPercent}%`;
+  wave2.style.top = `${cyPercent}%`;
+  gridEl.appendChild(wave2);
+
+  setTimeout(() => {
+    burst.remove();
+    wave1.remove();
+    wave2.remove();
+  }, 800);
 }
 
 function renderLegendMini(shape, extraClass) {
