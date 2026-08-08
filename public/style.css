@@ -64,13 +64,25 @@ button:disabled {
 
 .place-controls {
   display: flex;
-  gap: 10px;
+  gap: 8px;
   width: 100%;
-  max-width: 300px;
+  max-width: 340px;
+}
+
+.place-controls button {
+  flex: 1;
+  min-width: 0;
+  padding: 12px 8px;
+  font-size: 13px;
+  max-width: none;
 }
 
 #btn-rotate {
   background: #378add;
+}
+
+#btn-mirror {
+  background: #d4537e;
 }
 
 #btn-undo {

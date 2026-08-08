@@ -44,11 +44,17 @@ function rotateOffset([dx, dy], rotation) {
   }
 }
 
-function shapeCells(anchorX, anchorY, shape, rotation) {
-  const rotated = shape.map(off => rotateOffset(off, rotation));
-  const minDx = Math.min(...rotated.map(c => c[0]));
-  const minDy = Math.min(...rotated.map(c => c[1]));
-  return rotated.map(([dx, dy]) => [anchorX + dx - minDx, anchorY + dy - minDy]);
+function mirrorOffset([dx, dy], mirrored) {
+  return mirrored ? [-dx, dy] : [dx, dy];
+}
+
+function shapeCells(anchorX, anchorY, shape, rotation, mirrored) {
+  const transformed = shape
+    .map(off => mirrorOffset(off, mirrored))
+    .map(off => rotateOffset(off, rotation));
+  const minDx = Math.min(...transformed.map(c => c[0]));
+  const minDy = Math.min(...transformed.map(c => c[1]));
+  return transformed.map(([dx, dy]) => [anchorX + dx - minDx, anchorY + dy - minDy]);
 }
 
 function cellsInBounds(cells) {
@@ -244,6 +250,7 @@ function triggerCellAnimation(containerId, x, y, hit) {
 
 let placeShipIdx = 0;
 let currentRotation = 0;
+let currentMirrored = false;
 let lastHoverX = null;
 let lastHoverY = null;
 let placedShips = [];
@@ -263,6 +270,7 @@ function startPlacementUI(onReady) {
   showScreen('place');
   placeShipIdx = 0;
   currentRotation = 0;
+  currentMirrored = false;
   lastHoverX = null;
   lastHoverY = null;
   placedShips = [];
@@ -270,6 +278,7 @@ function startPlacementUI(onReady) {
   onPlacementReady = onReady;
   document.getElementById('btn-ready').classList.add('hidden');
   document.getElementById('btn-rotate').classList.remove('hidden');
+  document.getElementById('btn-mirror').classList.remove('hidden');
   document.getElementById('btn-undo').classList.remove('hidden');
   document.getElementById('place-message').textContent = '';
   renderPlaceHint();
@@ -308,7 +317,7 @@ function previewShip(x, y) {
   lastHoverY = y;
   clearPreview();
   if (placeShipIdx >= SHIP_DEFS.length) return;
-  const cells = shapeCells(x, y, SHIP_DEFS[placeShipIdx].shape, currentRotation);
+  const cells = shapeCells(x, y, SHIP_DEFS[placeShipIdx].shape, currentRotation, currentMirrored);
   const valid = cellsInBounds(cells) && cells.every(([cx, cy]) => !hasConflict(cx, cy));
   cells.forEach(([cx, cy]) => {
     if (cx < 0 || cx >= BOARD_SIZE || cy < 0 || cy >= BOARD_SIZE) return;
@@ -328,7 +337,7 @@ function buildPlaceBoardUI() {
 
 function tryPlaceShip(x, y) {
   if (placeShipIdx >= SHIP_DEFS.length) return;
-  const cells = shapeCells(x, y, SHIP_DEFS[placeShipIdx].shape, currentRotation);
+  const cells = shapeCells(x, y, SHIP_DEFS[placeShipIdx].shape, currentRotation, currentMirrored);
 
   if (!cellsInBounds(cells)) {
     document.getElementById('place-message').textContent = 'Statek nie miesci sie na planszy.';
@@ -343,6 +352,7 @@ function tryPlaceShip(x, y) {
   placedShips.push({ cells });
   placeShipIdx++;
   currentRotation = 0;
+  currentMirrored = false;
   document.getElementById('place-message').textContent = '';
   renderShipsLegend();
   buildPlaceBoardUI();
@@ -351,6 +361,7 @@ function tryPlaceShip(x, y) {
   if (placeShipIdx >= SHIP_DEFS.length) {
     document.getElementById('btn-ready').classList.remove('hidden');
     document.getElementById('btn-rotate').classList.add('hidden');
+    document.getElementById('btn-mirror').classList.add('hidden');
     document.getElementById('btn-undo').classList.add('hidden');
   }
 }
@@ -360,14 +371,21 @@ document.getElementById('btn-rotate').onclick = () => {
   if (lastHoverX !== null) previewShip(lastHoverX, lastHoverY);
 };
 
+document.getElementById('btn-mirror').onclick = () => {
+  currentMirrored = !currentMirrored;
+  if (lastHoverX !== null) previewShip(lastHoverX, lastHoverY);
+};
+
 document.getElementById('btn-undo').onclick = () => {
   if (placedShips.length === 0) return;
   const last = placedShips.pop();
   last.cells.forEach(([x, y]) => placedSet.delete(`${x},${y}`));
   placeShipIdx--;
   currentRotation = 0;
+  currentMirrored = false;
   document.getElementById('btn-ready').classList.add('hidden');
   document.getElementById('btn-rotate').classList.remove('hidden');
+  document.getElementById('btn-mirror').classList.remove('hidden');
   document.getElementById('place-message').textContent = '';
   renderPlaceHint();
   renderShipsLegend();
