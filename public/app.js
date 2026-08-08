@@ -4,9 +4,12 @@ const SHIP_DEFS = [
   { name: 'Krazownik (5)', shape: [[0, 0], [1, 0], [2, 0], [3, 0], [4, 0]] },
   { name: 'Pancernik (4)', shape: [[0, 0], [1, 0], [2, 0], [3, 0]] },
   { name: 'Niszczyciel L (4)', shape: [[0, 0], [0, 1], [0, 2], [1, 2]] },
-  { name: 'Fregata (3)', shape: [[0, 0], [1, 0], [2, 0]] },
+  { name: 'Fregata (3)', shape: [[0, 0], [1, 0], [2, 0]], freeform: true },
+  { name: 'Korweta (3)', shape: [[0, 0], [1, 0], [2, 0]] },
   { name: 'Torpedowiec (2)', shape: [[0, 0], [1, 0]] },
+  { name: 'Kuter (2)', shape: [[0, 0], [1, 0]] },
   { name: 'Lodz (1)', shape: [[0, 0]] },
+  { name: 'Boja (1)', shape: [[0, 0]] },
 ];
 
 const screens = {
@@ -258,6 +261,7 @@ let placedByIndex = [];
 let placementOrder = [];
 let placedSet = new Set();
 let onPlacementReady = null;
+let manualCells = [];
 
 function hasConflict(x, y) {
   for (let dx = -1; dx <= 1; dx++) {
@@ -266,6 +270,10 @@ function hasConflict(x, y) {
     }
   }
   return false;
+}
+
+function isAdjacentToAny(x, y, cells) {
+  return cells.some(([cx, cy]) => Math.abs(cx - x) + Math.abs(cy - y) === 1);
 }
 
 function placedShipsList() {
@@ -286,6 +294,7 @@ function startPlacementUI(onReady) {
   placedByIndex = new Array(SHIP_DEFS.length).fill(null);
   placementOrder = [];
   placedSet = new Set();
+  manualCells = [];
   onPlacementReady = onReady;
   document.getElementById('place-message').textContent = '';
   refreshPlacementUI();
@@ -298,15 +307,21 @@ function refreshPlacementUI() {
 
   const allPlaced = placedByIndex.every(Boolean);
   const pending = !placedByIndex[selectedIdx];
+  const freeform = SHIP_DEFS[selectedIdx].freeform;
   document.getElementById('btn-ready').classList.toggle('hidden', !allPlaced);
-  document.getElementById('btn-rotate').classList.toggle('hidden', !pending);
-  document.getElementById('btn-mirror').classList.toggle('hidden', !pending);
-  document.getElementById('btn-undo').classList.toggle('hidden', placementOrder.length === 0);
+  document.getElementById('btn-rotate').classList.toggle('hidden', !pending || freeform);
+  document.getElementById('btn-mirror').classList.toggle('hidden', !pending || freeform);
+  document.getElementById('btn-undo').classList.toggle('hidden', placementOrder.length === 0 && manualCells.length === 0);
 }
 
 function renderPlaceHint() {
+  const def = SHIP_DEFS[selectedIdx];
   if (!placedByIndex[selectedIdx]) {
-    document.getElementById('place-hint').textContent = `Ustaw: ${SHIP_DEFS[selectedIdx].name}`;
+    if (def.freeform) {
+      document.getElementById('place-hint').textContent = `Ustaw: ${def.name} - wybierz pole ${manualCells.length + 1}/${def.shape.length} (sasiadujace), kliknij ostatnie by cofnac`;
+    } else {
+      document.getElementById('place-hint').textContent = `Ustaw: ${def.name}`;
+    }
   } else {
     document.getElementById('place-hint').textContent = 'Wszystkie statki rozstawione. Kliknij statek na liscie, aby go przestawic.';
   }
@@ -335,6 +350,7 @@ function selectShip(i) {
   selectedIdx = i;
   currentRotation = 0;
   currentMirrored = false;
+  manualCells = [];
   document.getElementById('place-message').textContent = '';
   refreshPlacementUI();
 }
@@ -349,6 +365,15 @@ function previewShip(x, y) {
   lastHoverY = y;
   clearPreview();
   if (placedByIndex[selectedIdx]) return;
+
+  if (SHIP_DEFS[selectedIdx].freeform) {
+    if (manualCells.some(([cx, cy]) => cx === x && cy === y)) return;
+    const valid = !hasConflict(x, y) && (manualCells.length === 0 || isAdjacentToAny(x, y, manualCells));
+    const el = document.querySelector(`#place-board .grid .cell[data-x="${x}"][data-y="${y}"]`);
+    if (el) el.classList.add(valid ? 'preview-valid' : 'preview-invalid');
+    return;
+  }
+
   const cells = shapeCells(x, y, SHIP_DEFS[selectedIdx].shape, currentRotation, currentMirrored);
   const valid = cellsInBounds(cells) && cells.every(([cx, cy]) => !hasConflict(cx, cy));
   cells.forEach(([cx, cy]) => {
@@ -360,11 +385,52 @@ function previewShip(x, y) {
 
 function buildPlaceBoardUI() {
   const grid = buildBoard('place-board', {
-    onClick: tryPlaceShip,
+    onClick: (x, y) => (SHIP_DEFS[selectedIdx].freeform ? handleManualCellClick(x, y) : tryPlaceShip(x, y)),
     onHover: previewShip,
     onLeaveGrid: clearPreview,
   });
-  renderShipOverlays(grid, placedShipsList(), () => false);
+  const overlayList = placedShipsList().concat(manualCells.length > 0 ? [{ cells: manualCells }] : []);
+  renderShipOverlays(grid, overlayList, () => false);
+}
+
+function handleManualCellClick(x, y) {
+  if (placedByIndex[selectedIdx]) return;
+  const idxInManual = manualCells.findIndex(([mx, my]) => mx === x && my === y);
+  if (idxInManual !== -1) {
+    manualCells = manualCells.slice(0, idxInManual);
+    document.getElementById('place-message').textContent = '';
+    refreshPlacementUI();
+    return;
+  }
+
+  const size = SHIP_DEFS[selectedIdx].shape.length;
+  if (manualCells.length >= size) return;
+
+  if (hasConflict(x, y)) {
+    document.getElementById('place-message').textContent = 'Statki nie moga sie stykac ze soba.';
+    return;
+  }
+  if (manualCells.length > 0 && !isAdjacentToAny(x, y, manualCells)) {
+    document.getElementById('place-message').textContent = 'Kolejne pole musi sasiadowac z poprzednim.';
+    return;
+  }
+
+  manualCells.push([x, y]);
+  document.getElementById('place-message').textContent = '';
+
+  if (manualCells.length === size) {
+    const cells = manualCells.slice();
+    cells.forEach(([cx, cy]) => placedSet.add(`${cx},${cy}`));
+    placedByIndex[selectedIdx] = { cells };
+    placementOrder.push(selectedIdx);
+    manualCells = [];
+
+    const next = firstUnplacedIndex();
+    if (next !== -1) selectedIdx = next;
+    currentRotation = 0;
+    currentMirrored = false;
+  }
+  refreshPlacementUI();
 }
 
 function tryPlaceShip(x, y) {
@@ -403,6 +469,12 @@ document.getElementById('btn-mirror').onclick = () => {
 };
 
 document.getElementById('btn-undo').onclick = () => {
+  if (manualCells.length > 0) {
+    manualCells.pop();
+    document.getElementById('place-message').textContent = '';
+    refreshPlacementUI();
+    return;
+  }
   if (placementOrder.length === 0) return;
   const idx = placementOrder.pop();
   placedByIndex[idx].cells.forEach(([x, y]) => placedSet.delete(`${x},${y}`));
@@ -415,7 +487,7 @@ document.getElementById('btn-undo').onclick = () => {
 };
 
 document.getElementById('btn-ready').onclick = () => {
-  if (onPlacementReady) onPlacementReady(placedShips.slice());
+  if (onPlacementReady) onPlacementReady(placedShipsList());
 };
 
 // ---------- Online mode ----------
@@ -519,7 +591,7 @@ function buildOwnBoardOnline() {
     getCellClass: (x, y) => [ownHits[`${x},${y}`] || null],
     getCellContent: (x, y) => symbolForState(ownHits[`${x},${y}`]),
   });
-  renderShipOverlays(grid, placedShips, (ship) => ship.cells.every(([x, y]) => ownHits[`${x},${y}`] === 'sunk'));
+  renderShipOverlays(grid, placedShipsList(), (ship) => ship.cells.every(([x, y]) => ownHits[`${x},${y}`] === 'sunk'));
 }
 
 function fireOnline(x, y) {

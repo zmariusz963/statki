@@ -12,7 +12,7 @@ const MIME = {
   '.js': 'application/javascript',
 };
 
-const SHIP_SIZES = [5, 4, 4, 3, 2, 1];
+const SHIP_SIZES = [5, 4, 4, 3, 3, 2, 2, 1, 1];
 const BOARD_SIZE = 10;
 
 const server = http.createServer((req, res) => {
