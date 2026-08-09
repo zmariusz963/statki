@@ -34,6 +34,20 @@ body {
   animation: screenIn 0.25s ease-out;
 }
 
+#btn-mute {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  width: auto;
+  max-width: none;
+  padding: 8px 12px;
+  font-size: 12px;
+  background: linear-gradient(180deg, #22303d, #182430);
+  border: 1px solid #2b3a47;
+  box-shadow: none;
+  z-index: 10;
+}
+
 @keyframes screenIn {
   0% { opacity: 0; transform: translateY(6px); }
   100% { opacity: 1; transform: translateY(0); }
@@ -353,6 +367,15 @@ input:focus {
   color: #cddce6;
 }
 
+@keyframes turnPulse {
+  0% { opacity: 0.3; transform: scale(0.95); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+.turn-indicator.pulse {
+  animation: turnPulse 0.3s ease-out;
+}
+
 .ships-legend {
   display: flex;
   flex-wrap: wrap;
@@ -441,12 +464,25 @@ input:focus {
   fill: #38495a;
 }
 
+.ship-deck-line {
+  stroke: rgba(255, 255, 255, 0.18);
+  stroke-width: 1.5;
+}
+
+.ship-bow {
+  fill: #6d8194;
+}
+
 .ship-overlay.sunk .ship-hull {
   fill: #993c1d;
 }
 
 .ship-overlay.sunk .ship-turret {
   fill: #712b13;
+}
+
+.ship-overlay.sunk .ship-bow {
+  fill: #b0451f;
 }
 
 .ship-single-dot {
@@ -519,4 +555,58 @@ input:focus {
 @keyframes waveExpand {
   0% { transform: translate(-50%, -50%) scale(0.2); opacity: 0.9; border-width: 3px; }
   100% { transform: translate(-50%, -50%) scale(3.4); opacity: 0; border-width: 1px; }
+}
+
+.hit-poof-particle {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #f0997b;
+  left: 0;
+  top: 0;
+  transform: rotate(var(--angle));
+  animation: poofParticle 0.4s ease-out forwards;
+}
+
+@keyframes poofParticle {
+  0% { transform: rotate(var(--angle)) translateX(0) scale(1); opacity: 1; }
+  100% { transform: rotate(var(--angle)) translateX(12px) scale(0.2); opacity: 0; }
+}
+
+.miss-ripple {
+  position: absolute;
+  width: 10%;
+  height: 10%;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, -50%) scale(0.3);
+  border-radius: 50%;
+  border: 2px solid #6fb3d8;
+  z-index: 4;
+  pointer-events: none;
+  animation: missRippleExpand 0.5s ease-out forwards;
+}
+
+@keyframes missRippleExpand {
+  0% { transform: translate(-50%, -50%) scale(0.3); opacity: 0.8; }
+  100% { transform: translate(-50%, -50%) scale(2.2); opacity: 0; }
+}
+
+.cannon-shell {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #ffe8b8, #c98a3a);
+  transform: translate(-50%, -50%);
+  z-index: 6;
+  pointer-events: none;
+  animation: shellArc 0.38s ease-in forwards;
+}
+
+@keyframes shellArc {
+  0% { transform: translate(-50%, calc(-50% + var(--rise))) scale(0.6); opacity: 0; }
+  40% { opacity: 1; }
+  100% { transform: translate(-50%, -50%) scale(1); opacity: 0; }
 }

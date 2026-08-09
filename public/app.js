@@ -1,15 +1,16 @@
 const BOARD_SIZE = 10;
 
+document.getElementById('btn-mute').onclick = () => {
+  const muted = AudioEngine.toggleMute();
+  document.getElementById('btn-mute').textContent = muted ? 'Dzwiek: wyl' : 'Dzwiek: wl';
+};
+
 const SHIP_DEFS = [
-  { name: 'Krazownik (5)', shape: [[0, 0], [1, 0], [2, 0], [3, 0], [4, 0]], freeform: true },
-  { name: 'Pancernik (4)', shape: [[0, 0], [1, 0], [2, 0], [3, 0]], freeform: true },
-  { name: 'Niszczyciel L (4)', shape: [[0, 0], [0, 1], [0, 2], [1, 2]], freeform: true },
-  { name: 'Fregata (3)', shape: [[0, 0], [1, 0], [2, 0]], freeform: true },
-  { name: 'Korweta (3)', shape: [[0, 0], [1, 0], [2, 0]], freeform: true },
-  { name: 'Torpedowiec (2)', shape: [[0, 0], [1, 0]], freeform: true },
-  { name: 'Kuter (2)', shape: [[0, 0], [1, 0]], freeform: true },
-  { name: 'Lodz (1)', shape: [[0, 0]], freeform: true },
-  { name: 'Boja (1)', shape: [[0, 0]], freeform: true },
+  { name: 'Lotniskowiec (5)', shape: [[0, 0], [1, 0], [2, 0], [3, 0], [4, 0]] },
+  { name: 'Pancernik (4)', shape: [[0, 0], [1, 0], [2, 0], [3, 0]] },
+  { name: 'Krazownik (3)', shape: [[0, 0], [1, 0], [2, 0]] },
+  { name: 'Okret podwodny (3)', shape: [[0, 0], [1, 0], [2, 0]] },
+  { name: 'Niszczyciel (2)', shape: [[0, 0], [1, 0]] },
 ];
 
 const screens = {
@@ -106,9 +107,17 @@ function shipSVGMarkup(size, horizontal) {
   const hullPoints = horizontal
     ? `4,20 14,6 ${len - 14},6 ${len - 4},20 ${len - 14},34 14,34`
     : `20,4 34,14 34,${len - 14} 20,${len - 4} 6,${len - 14} 6,14`;
+  const deckLine = horizontal
+    ? `<line x1="10" y1="20" x2="${len - 10}" y2="20" class="ship-deck-line" />`
+    : `<line x1="20" y1="10" x2="20" y2="${len - 10}" class="ship-deck-line" />`;
+  const bowTip = horizontal
+    ? `<circle cx="${len - 6}" cy="20" r="3" class="ship-bow" />`
+    : `<circle cx="20" cy="6" r="3" class="ship-bow" />`;
   return `<svg viewBox="0 0 ${w} ${h}" class="ship-svg" preserveAspectRatio="none">
     <polygon points="${hullPoints}" class="ship-hull" />
+    ${deckLine}
     ${turrets}
+    ${bowTip}
   </svg>`;
 }
 
@@ -188,6 +197,50 @@ function spawnSinkBurst(gridEl, cxPercent, cyPercent) {
     wave1.remove();
     wave2.remove();
   }, 800);
+}
+
+function spawnHitPoof(gridEl, x, y) {
+  if (!gridEl) return;
+  const cxPercent = (x + 0.5) * 10;
+  const cyPercent = (y + 0.5) * 10;
+  const poof = document.createElement('div');
+  poof.className = 'sink-burst';
+  poof.style.left = `${cxPercent}%`;
+  poof.style.top = `${cyPercent}%`;
+  const count = 6;
+  for (let i = 0; i < count; i++) {
+    const p = document.createElement('div');
+    p.className = 'hit-poof-particle';
+    p.style.setProperty('--angle', `${(360 / count) * i}deg`);
+    poof.appendChild(p);
+  }
+  gridEl.appendChild(poof);
+  setTimeout(() => poof.remove(), 450);
+}
+
+function spawnMissRipple(gridEl, x, y) {
+  if (!gridEl) return;
+  const cxPercent = (x + 0.5) * 10;
+  const cyPercent = (y + 0.5) * 10;
+  const ripple = document.createElement('div');
+  ripple.className = 'miss-ripple';
+  ripple.style.left = `${cxPercent}%`;
+  ripple.style.top = `${cyPercent}%`;
+  gridEl.appendChild(ripple);
+  setTimeout(() => ripple.remove(), 550);
+}
+
+function spawnProjectile(gridEl, x, y) {
+  if (!gridEl) return;
+  const targetXPercent = (x + 0.5) * 10;
+  const targetYPercent = (y + 0.5) * 10;
+  const shell = document.createElement('div');
+  shell.className = 'cannon-shell';
+  shell.style.left = `${targetXPercent}%`;
+  shell.style.top = `${targetYPercent}%`;
+  shell.style.setProperty('--rise', `${40 + Math.random() * 30}px`);
+  gridEl.appendChild(shell);
+  setTimeout(() => shell.remove(), 380);
 }
 
 function renderLegendMini(shape, extraClass) {
@@ -326,8 +379,8 @@ function refreshPlacementUI() {
   const pending = !placedByIndex[selectedIdx];
   const freeform = SHIP_DEFS[selectedIdx].freeform;
   document.getElementById('btn-ready').classList.toggle('hidden', !allPlaced);
-  document.getElementById('btn-rotate').classList.toggle('hidden', !pending || freeform);
-  document.getElementById('btn-mirror').classList.toggle('hidden', !pending || freeform);
+  document.getElementById('btn-rotate').classList.toggle('hidden', !pending || !!freeform);
+  document.getElementById('btn-mirror').classList.add('hidden');
   document.getElementById('btn-undo').classList.toggle('hidden', placementOrder.length === 0 && manualCells.length === 0);
 }
 
@@ -589,8 +642,16 @@ function startOnlineGame() {
   updateTurnIndicator();
 }
 
+function pulseTurnIndicator() {
+  const el = document.getElementById('turn-indicator');
+  el.classList.remove('pulse');
+  void el.offsetWidth;
+  el.classList.add('pulse');
+}
+
 function updateTurnIndicator() {
   document.getElementById('turn-indicator').textContent = myTurn ? 'Twoja tura - strzelaj!' : 'Tura przeciwnika...';
+  pulseTurnIndicator();
 }
 
 function buildEnemyBoardOnline() {
@@ -615,6 +676,8 @@ function fireOnline(x, y) {
   if (!myTurn) return;
   const key = `${x},${y}`;
   if (enemyHits[key]) return;
+  AudioEngine.playCannonShot();
+  spawnProjectile(document.querySelector('#enemy-board .grid'), x, y);
   ws.send(JSON.stringify({ type: 'fire', x, y }));
 }
 
@@ -635,9 +698,18 @@ function applyOnlineFireResult(msg) {
   buildOwnBoardOnline();
   triggerCellAnimation(iFired ? 'enemy-board' : 'own-board', msg.x, msg.y, msg.hit);
 
+  const boardId = iFired ? 'enemy-board' : 'own-board';
+  const boardGrid = document.querySelector(`#${boardId} .grid`);
   if (msg.sunk && msg.sunkCells) {
     const { cx, cy } = shipCenterPercent(msg.sunkCells);
-    spawnSinkBurst(document.querySelector(`#${iFired ? 'enemy-board' : 'own-board'} .grid`), cx, cy);
+    spawnSinkBurst(boardGrid, cx, cy);
+    AudioEngine.playExplosion();
+  } else if (msg.hit) {
+    spawnHitPoof(boardGrid, msg.x, msg.y);
+    AudioEngine.playHitImpact();
+  } else {
+    spawnMissRipple(boardGrid, msg.x, msg.y);
+    AudioEngine.playSplash();
   }
 
   myTurn = msg.nextTurn === playerIdx;
@@ -646,7 +718,7 @@ function applyOnlineFireResult(msg) {
   if (msg.gameOver) {
     document.getElementById('game-message').textContent = iFired ? 'Wygrywasz! Wszystkie statki przeciwnika zatopione.' : 'Przegrywasz! Twoja flota zatopiona.';
   } else if (msg.hit) {
-    document.getElementById('game-message').textContent = iFired ? 'Trafienie! Strzelasz jeszcze raz.' : 'Przeciwnik trafil i strzela dalej.';
+    document.getElementById('game-message').textContent = iFired ? 'Trafienie!' : 'Przeciwnik trafil.';
   } else {
     document.getElementById('game-message').textContent = iFired ? 'Pudlo.' : 'Przeciwnik nie trafil.';
   }
@@ -710,6 +782,7 @@ function startLocalTurn() {
   showScreen('game');
   document.getElementById('game-message').textContent = '';
   document.getElementById('turn-indicator').textContent = `Gracz ${local.turn + 1} - Twoja tura, strzelaj!`;
+  pulseTurnIndicator();
 
   const shooter = local.turn;
   const target = shooter === 0 ? 1 : 0;
@@ -734,18 +807,18 @@ function fireLocal(x, y, shooter, target) {
   const key = `${x},${y}`;
   if (local.hits[target].has(key)) return;
 
+  AudioEngine.playCannonShot();
+  spawnProjectile(document.querySelector('#enemy-board .grid'), x, y);
   local.hits[target].add(key);
   const hitShip = local.ships[target].find(s => s.cells.some(([sx, sy]) => sx === x && sy === y));
   const isHit = !!hitShip;
   const shipJustSunk = isHit && shipFullySunkLocal(target, hitShip);
   const allSunk = local.ships[target].every(s => shipFullySunkLocal(target, s));
 
-  const continuesTurn = isHit && !allSunk;
-
   const enemyGrid = buildBoard('enemy-board', {
     getCellClass: (cx, cy) => [local.hits[target].has(`${cx},${cy}`) ? cellStateLocal(target, cx, cy) : null],
     getCellContent: (cx, cy) => local.hits[target].has(`${cx},${cy}`) ? symbolForState(cellStateLocal(target, cx, cy)) : '',
-    onClick: continuesTurn ? (cx, cy) => fireLocal(cx, cy, shooter, target) : () => {},
+    onClick: () => {},
   });
   const sunkTargetShips = local.ships[target].filter(ship => shipFullySunkLocal(target, ship));
   renderShipOverlays(enemyGrid, sunkTargetShips, () => true);
@@ -754,6 +827,13 @@ function fireLocal(x, y, shooter, target) {
   if (shipJustSunk) {
     const { cx, cy } = shipCenterPercent(hitShip.cells);
     spawnSinkBurst(enemyGrid, cx, cy);
+    AudioEngine.playExplosion();
+  } else if (isHit) {
+    spawnHitPoof(enemyGrid, x, y);
+    AudioEngine.playHitImpact();
+  } else {
+    spawnMissRipple(enemyGrid, x, y);
+    AudioEngine.playSplash();
   }
 
   if (allSunk) {
@@ -762,12 +842,8 @@ function fireLocal(x, y, shooter, target) {
     return;
   }
 
-  if (isHit) {
-    document.getElementById('game-message').textContent = shipJustSunk ? 'Zatopiony! Strzelasz jeszcze raz.' : 'Trafienie! Strzelasz jeszcze raz.';
-    return;
-  }
+  document.getElementById('game-message').textContent = isHit ? (shipJustSunk ? 'Zatopiony!' : 'Trafienie!') : 'Pudlo.';
 
-  document.getElementById('game-message').textContent = 'Pudlo.';
   local.turn = target;
   setTimeout(() => {
     showPass(`Przekaz telefon graczowi ${target + 1}`, `Gracz ${target + 1}, kliknij Dalej gdy telefon jest u Ciebie.`, () => {
