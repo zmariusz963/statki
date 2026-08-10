@@ -1,4 +1,4 @@
-const BOARD_SIZE = 10;
+let BOARD_SIZE = 10;
 
 document.getElementById('btn-mute').onclick = () => {
   const muted = AudioEngine.toggleMute();
@@ -83,11 +83,15 @@ function isStraightLine(cells) {
   return allSameY || allSameX;
 }
 
+function cellPct() {
+  return 100 / BOARD_SIZE;
+}
+
 function shipCenterPercent(cells) {
   const xs = cells.map(c => c[0]), ys = cells.map(c => c[1]);
   const minX = Math.min(...xs), maxX = Math.max(...xs);
   const minY = Math.min(...ys), maxY = Math.max(...ys);
-  return { cx: (minX + maxX + 1) / 2 * 10, cy: (minY + maxY + 1) / 2 * 10 };
+  return { cx: (minX + maxX + 1) / 2 * cellPct(), cy: (minY + maxY + 1) / 2 * cellPct() };
 }
 
 // ---------- Ship graphics ----------
@@ -131,10 +135,10 @@ function renderShipOverlays(gridEl, ships, isSunkFn) {
       const [x, y] = cells[0];
       const el = document.createElement('div');
       el.className = 'ship-overlay' + (sunk ? ' sunk' : '');
-      el.style.left = `${x * 10}%`;
-      el.style.top = `${y * 10}%`;
-      el.style.width = '10%';
-      el.style.height = '10%';
+      el.style.left = `${x * cellPct()}%`;
+      el.style.top = `${y * cellPct()}%`;
+      el.style.width = `${cellPct()}%`;
+      el.style.height = `${cellPct()}%`;
       el.style.animationDelay = `${(Math.random() * -3).toFixed(2)}s`;
       el.innerHTML = '<div class="ship-single-dot"></div>';
       gridEl.appendChild(el);
@@ -145,10 +149,10 @@ function renderShipOverlays(gridEl, ships, isSunkFn) {
       const horizontal = (maxX - minX) >= (maxY - minY);
       const el = document.createElement('div');
       el.className = 'ship-overlay' + (sunk ? ' sunk' : '');
-      el.style.left = `${minX * 10}%`;
-      el.style.top = `${minY * 10}%`;
-      el.style.width = `${(maxX - minX + 1) * 10}%`;
-      el.style.height = `${(maxY - minY + 1) * 10}%`;
+      el.style.left = `${minX * cellPct()}%`;
+      el.style.top = `${minY * cellPct()}%`;
+      el.style.width = `${(maxX - minX + 1) * cellPct()}%`;
+      el.style.height = `${(maxY - minY + 1) * cellPct()}%`;
       el.style.animationDelay = `${(Math.random() * -3).toFixed(2)}s`;
       el.innerHTML = shipSVGMarkup(cells.length, horizontal);
       gridEl.appendChild(el);
@@ -157,10 +161,10 @@ function renderShipOverlays(gridEl, ships, isSunkFn) {
       cells.forEach(([x, y]) => {
         const seg = document.createElement('div');
         seg.className = 'ship-overlay ship-segment' + (sunk ? ' sunk' : '');
-        seg.style.left = `${x * 10}%`;
-        seg.style.top = `${y * 10}%`;
-        seg.style.width = '10%';
-        seg.style.height = '10%';
+        seg.style.left = `${x * cellPct()}%`;
+        seg.style.top = `${y * cellPct()}%`;
+        seg.style.width = `${cellPct()}%`;
+        seg.style.height = `${cellPct()}%`;
         seg.style.animationDelay = segDelay;
         seg.innerHTML = '<div class="seg-inner"></div>';
         gridEl.appendChild(seg);
@@ -205,8 +209,8 @@ function spawnSinkBurst(gridEl, cxPercent, cyPercent) {
 
 function spawnHitPoof(gridEl, x, y) {
   if (!gridEl) return;
-  const cxPercent = (x + 0.5) * 10;
-  const cyPercent = (y + 0.5) * 10;
+  const cxPercent = (x + 0.5) * cellPct();
+  const cyPercent = (y + 0.5) * cellPct();
   const poof = document.createElement('div');
   poof.className = 'sink-burst';
   poof.style.left = `${cxPercent}%`;
@@ -224,8 +228,8 @@ function spawnHitPoof(gridEl, x, y) {
 
 function spawnMissRipple(gridEl, x, y) {
   if (!gridEl) return;
-  const cxPercent = (x + 0.5) * 10;
-  const cyPercent = (y + 0.5) * 10;
+  const cxPercent = (x + 0.5) * cellPct();
+  const cyPercent = (y + 0.5) * cellPct();
   const ripple = document.createElement('div');
   ripple.className = 'miss-ripple';
   ripple.style.left = `${cxPercent}%`;
@@ -236,8 +240,8 @@ function spawnMissRipple(gridEl, x, y) {
 
 function spawnProjectile(gridEl, x, y) {
   if (!gridEl) return;
-  const targetXPercent = (x + 0.5) * 10;
-  const targetYPercent = (y + 0.5) * 10;
+  const targetXPercent = (x + 0.5) * cellPct();
+  const targetYPercent = (y + 0.5) * cellPct();
   const shell = document.createElement('div');
   shell.className = 'cannon-shell';
   shell.style.left = `${targetXPercent}%`;
@@ -277,6 +281,7 @@ function buildBoard(containerId, opts) {
 
   const colLabels = document.createElement('div');
   colLabels.className = 'col-labels';
+  colLabels.style.gridTemplateColumns = `repeat(${BOARD_SIZE}, 1fr)`;
   for (let x = 0; x < BOARD_SIZE; x++) {
     const l = document.createElement('div');
     l.className = 'label-cell';
@@ -287,6 +292,7 @@ function buildBoard(containerId, opts) {
 
   const rowLabels = document.createElement('div');
   rowLabels.className = 'row-labels';
+  rowLabels.style.gridTemplateRows = `repeat(${BOARD_SIZE}, 1fr)`;
   for (let y = 0; y < BOARD_SIZE; y++) {
     const l = document.createElement('div');
     l.className = 'label-cell';
@@ -297,6 +303,8 @@ function buildBoard(containerId, opts) {
 
   const grid = document.createElement('div');
   grid.className = 'grid';
+  grid.style.gridTemplateColumns = `repeat(${BOARD_SIZE}, 1fr)`;
+  grid.style.gridTemplateRows = `repeat(${BOARD_SIZE}, 1fr)`;
   for (let y = 0; y < BOARD_SIZE; y++) {
     for (let x = 0; x < BOARD_SIZE; x++) {
       const cell = document.createElement('div');
