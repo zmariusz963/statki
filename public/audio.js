@@ -57,12 +57,30 @@ const AudioEngine = (() => {
   }
   const scale = [0, 2, 3, 5, 7, 8, 10, 12];
   const melodySeq = [
-    [4, 1], [4, 1], [2, 1], [0, 2],
-    [4, 1], [5, 1], [4, 1], [2, 2],
-    [7, 1], [7, 1], [5, 1], [4, 2],
-    [2, 1], [0, 1], [2, 1], [4, 2],
+    [6, 1], [4, 1], [2, 1], [0, 3],
+    [6, 1], [4, 1], [2, 1], [0, 3],
+    [7, 1], [7, 1], [6, 1], [4, 2],
+    [6, 1], [4, 1], [2, 1], [0, 2],
   ];
-  const beatDuration = 0.22;
+  const beatDuration = 0.2;
+
+  function bassToneAt(time, freq, duration, gainNode, vol) {
+    const osc = ctx.createOscillator();
+    osc.type = 'sawtooth';
+    osc.frequency.value = freq;
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = 500;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, time);
+    g.gain.linearRampToValueAtTime(vol, time + 0.03);
+    g.gain.exponentialRampToValueAtTime(0.0001, time + duration);
+    osc.connect(filter);
+    filter.connect(g);
+    g.connect(gainNode);
+    osc.start(time);
+    osc.stop(time + duration + 0.05);
+  }
 
   function scheduleMusicLoop() {
     if (!musicStarted) return;
@@ -73,7 +91,10 @@ const AudioEngine = (() => {
       if (idx !== null) {
         toneAt(t, freqFromSemitone(scale[idx]), dur * 0.9, musicGain, 'triangle', 0.5);
       }
-      if (i % 4 === 0) thumpAt(t, musicGain, 0.35);
+      if (i % 4 === 0) {
+        thumpAt(t, musicGain, 0.35);
+        bassToneAt(t, freqFromSemitone(scale[0] - 12), beatDuration * 4 * 0.9, musicGain, 0.3);
+      }
       t += dur;
     });
     const totalDuration = melodySeq.reduce((sum, [, b]) => sum + b * beatDuration, 0);
