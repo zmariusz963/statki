@@ -2,7 +2,7 @@ const BOARD_SIZE = 10;
 
 document.getElementById('btn-mute').onclick = () => {
   const muted = AudioEngine.toggleMute();
-  document.getElementById('btn-mute').textContent = muted ? 'Dzwiek: wyl' : 'Dzwiek: wl';
+  document.getElementById('btn-mute').innerHTML = muted ? '&#128263;' : '&#128266;';
 };
 
 const SHIP_DEFS = [
@@ -135,6 +135,7 @@ function renderShipOverlays(gridEl, ships, isSunkFn) {
       el.style.top = `${y * 10}%`;
       el.style.width = '10%';
       el.style.height = '10%';
+      el.style.animationDelay = `${(Math.random() * -3).toFixed(2)}s`;
       el.innerHTML = '<div class="ship-single-dot"></div>';
       gridEl.appendChild(el);
     } else if (isStraightLine(cells)) {
@@ -148,9 +149,11 @@ function renderShipOverlays(gridEl, ships, isSunkFn) {
       el.style.top = `${minY * 10}%`;
       el.style.width = `${(maxX - minX + 1) * 10}%`;
       el.style.height = `${(maxY - minY + 1) * 10}%`;
+      el.style.animationDelay = `${(Math.random() * -3).toFixed(2)}s`;
       el.innerHTML = shipSVGMarkup(cells.length, horizontal);
       gridEl.appendChild(el);
     } else {
+      const segDelay = `${(Math.random() * -3).toFixed(2)}s`;
       cells.forEach(([x, y]) => {
         const seg = document.createElement('div');
         seg.className = 'ship-overlay ship-segment' + (sunk ? ' sunk' : '');
@@ -158,6 +161,7 @@ function renderShipOverlays(gridEl, ships, isSunkFn) {
         seg.style.top = `${y * 10}%`;
         seg.style.width = '10%';
         seg.style.height = '10%';
+        seg.style.animationDelay = segDelay;
         seg.innerHTML = '<div class="seg-inner"></div>';
         gridEl.appendChild(seg);
       });
@@ -402,7 +406,8 @@ function renderShipsLegend() {
   legend.innerHTML = '';
   SHIP_DEFS.forEach((def, i) => {
     const item = document.createElement('div');
-    item.className = 'ship-legend-item';
+    item.className = 'ship-legend-item legend-in';
+    item.style.animationDelay = `${i * 0.05}s`;
     if (placedByIndex[i]) item.classList.add('placed');
     if (i === selectedIdx) item.classList.add('current');
     item.appendChild(renderLegendMini(def.shape));
@@ -637,6 +642,7 @@ function startOnlineGame() {
   enemyHits = {};
   ownHits = {};
   sunkEnemyShips = [];
+  document.getElementById('game-message').classList.remove('game-over-banner');
   buildEnemyBoardOnline();
   buildOwnBoardOnline();
   updateTurnIndicator();
@@ -716,7 +722,9 @@ function applyOnlineFireResult(msg) {
   updateTurnIndicator();
 
   if (msg.gameOver) {
-    document.getElementById('game-message').textContent = iFired ? 'Wygrywasz! Wszystkie statki przeciwnika zatopione.' : 'Przegrywasz! Twoja flota zatopiona.';
+    const gm = document.getElementById('game-message');
+    gm.textContent = iFired ? 'Wygrywasz! Wszystkie statki przeciwnika zatopione.' : 'Przegrywasz! Twoja flota zatopiona.';
+    gm.classList.add('game-over-banner');
   } else if (msg.hit) {
     document.getElementById('game-message').textContent = iFired ? 'Trafienie!' : 'Przeciwnik trafil.';
   } else {
@@ -780,7 +788,9 @@ function shipFullySunkLocal(targetPlayerIdx, ship) {
 
 function startLocalTurn() {
   showScreen('game');
-  document.getElementById('game-message').textContent = '';
+  const gm = document.getElementById('game-message');
+  gm.textContent = '';
+  gm.classList.remove('game-over-banner');
   document.getElementById('turn-indicator').textContent = `Gracz ${local.turn + 1} - Twoja tura, strzelaj!`;
   pulseTurnIndicator();
 
@@ -837,7 +847,9 @@ function fireLocal(x, y, shooter, target) {
   }
 
   if (allSunk) {
-    document.getElementById('game-message').textContent = 'Zatopiony ostatni statek!';
+    const gm = document.getElementById('game-message');
+    gm.textContent = 'Zatopiony ostatni statek!';
+    gm.classList.add('game-over-banner');
     document.getElementById('turn-indicator').textContent = `Gracz ${shooter + 1} wygrywa!`;
     return;
   }

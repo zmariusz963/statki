@@ -3,9 +3,45 @@ const AudioEngine = (() => {
   let masterGain = null;
   let musicGain = null;
   let sfxGain = null;
+  let convolver = null;
   let muted = false;
   let musicStarted = false;
   let musicTimer = null;
+  let player = null;
+  let instrumentsReady = false;
+
+  const INSTRUMENT_NAMES = {
+    piano: '_tone_0000_FluidR3_GM_sf2_file',
+    violin: '_tone_0400_FluidR3_GM_sf2_file',
+    cello: '_tone_0420_FluidR3_GM_sf2_file',
+    contrabass: '_tone_0430_FluidR3_GM_sf2_file',
+    trumpet: '_tone_0560_FluidR3_GM_sf2_file',
+    horn: '_tone_0600_FluidR3_GM_sf2_file',
+    trombone: '_tone_0570_FluidR3_GM_sf2_file',
+    timpani: '_tone_0470_FluidR3_GM_sf2_file',
+    accordion: '_tone_0210_FluidR3_GM_sf2_file',
+    organ: '_tone_0190_FluidR3_GM_sf2_file',
+  };
+
+  function pannedDestination(gainNode, pan) {
+    const panner = ctx.createStereoPanner();
+    panner.pan.value = pan;
+    panner.connect(gainNode);
+    return panner;
+  }
+
+  function createReverbImpulse(duration, decay) {
+    const rate = ctx.sampleRate;
+    const length = Math.floor(rate * duration);
+    const impulse = ctx.createBuffer(2, length, rate);
+    for (let ch = 0; ch < 2; ch++) {
+      const data = impulse.getChannelData(ch);
+      for (let i = 0; i < length; i++) {
+        data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, decay);
+      }
+    }
+    return impulse;
+  }
 
   function ensureCtx() {
     if (!ctx) {
@@ -13,28 +49,59 @@ const AudioEngine = (() => {
       masterGain = ctx.createGain();
       masterGain.gain.value = 1;
       masterGain.connect(ctx.destination);
+
+      convolver = ctx.createConvolver();
+      convolver.buffer = createReverbImpulse(2.4, 2.2);
+      const reverbReturn = ctx.createGain();
+      reverbReturn.gain.value = 0.9;
+      convolver.connect(reverbReturn);
+      reverbReturn.connect(masterGain);
+
       musicGain = ctx.createGain();
-      musicGain.gain.value = 0.16;
+      musicGain.gain.value = 0.05;
       musicGain.connect(masterGain);
+      const musicReverbSend = ctx.createGain();
+      musicReverbSend.gain.value = 0.4;
+      musicGain.connect(musicReverbSend);
+      musicReverbSend.connect(convolver);
+
       sfxGain = ctx.createGain();
       sfxGain.gain.value = 0.55;
       sfxGain.connect(masterGain);
+      const sfxReverbSend = ctx.createGain();
+      sfxReverbSend.gain.value = 0.15;
+      sfxGain.connect(sfxReverbSend);
+      sfxReverbSend.connect(convolver);
+
+      if (window.WebAudioFontPlayer) {
+        player = new window.WebAudioFontPlayer();
+      }
     }
     if (ctx.state === 'suspended') ctx.resume();
   }
 
-  function toneAt(time, freq, duration, gainNode, type, vol) {
-    const osc = ctx.createOscillator();
-    osc.type = type || 'triangle';
-    osc.frequency.value = freq;
-    const g = ctx.createGain();
-    g.gain.setValueAtTime(0, time);
-    g.gain.linearRampToValueAtTime(vol || 0.5, time + 0.02);
-    g.gain.exponentialRampToValueAtTime(0.0001, time + duration);
-    osc.connect(g);
-    g.connect(gainNode);
-    osc.start(time);
-    osc.stop(time + duration + 0.05);
+  function initInstruments(callback) {
+    if (!player) {
+      callback();
+      return;
+    }
+    const names = Object.values(INSTRUMENT_NAMES);
+    names.forEach((name) => {
+      if (window[name]) {
+        player.loader.decodeAfterLoading(ctx, name);
+      }
+    });
+    setTimeout(() => {
+      instrumentsReady = true;
+      callback();
+    }, 1300);
+  }
+
+  function playNote(instrument, when, midiPitch, duration, volume, destination) {
+    if (!player || !instrumentsReady) return;
+    const preset = window[INSTRUMENT_NAMES[instrument]];
+    if (!preset) return;
+    player.queueWaveTable(ctx, destination, preset, when, midiPitch, duration, volume);
   }
 
   function thumpAt(time, gainNode, vol) {
@@ -51,53 +118,82 @@ const AudioEngine = (() => {
     osc.stop(time + 0.25);
   }
 
-  const BASE_FREQ = 293.66;
-  function freqFromSemitone(n) {
-    return BASE_FREQ * Math.pow(2, n / 12);
-  }
   const scale = [0, 2, 3, 5, 7, 8, 10, 12];
-  const melodySeq = [
-    [6, 1], [4, 1], [2, 1], [0, 3],
-    [6, 1], [4, 1], [2, 1], [0, 3],
-    [7, 1], [7, 1], [6, 1], [4, 2],
-    [6, 1], [4, 1], [2, 1], [0, 2],
-  ];
-  const beatDuration = 0.2;
+  function midiPitch(semitoneOffset) {
+    return 62 + semitoneOffset;
+  }
 
-  function bassToneAt(time, freq, duration, gainNode, vol) {
-    const osc = ctx.createOscillator();
-    osc.type = 'sawtooth';
-    osc.frequency.value = freq;
-    const filter = ctx.createBiquadFilter();
-    filter.type = 'lowpass';
-    filter.frequency.value = 500;
-    const g = ctx.createGain();
-    g.gain.setValueAtTime(0, time);
-    g.gain.linearRampToValueAtTime(vol, time + 0.03);
-    g.gain.exponentialRampToValueAtTime(0.0001, time + duration);
-    osc.connect(filter);
-    filter.connect(g);
-    g.connect(gainNode);
-    osc.start(time);
-    osc.stop(time + duration + 0.05);
+  const melodySeq = [
+    [0, 1], [7, 1], [4, 1], [7, 1], [2, 1], [7, 1], [0, 1], [7, 1],
+    [0, 1], [7, 1], [4, 1], [7, 1], [2, 1], [7, 1], [0, 1], [7, 1],
+    [4, 2], [5, 2], [6, 2], [7, 2],
+  ];
+  const beatDuration = 0.11;
+
+  function scheduleSlowSection(startTime) {
+    const slowNotes = [0, 4, 2, 7, 0, 0];
+    const slowBeat = 0.4;
+    let t = startTime;
+    slowNotes.forEach((idx, i) => {
+      const dur = i === slowNotes.length - 1 ? slowBeat * 1.8 : slowBeat;
+      playNote('piano', t, midiPitch(scale[idx] - 12), dur * 1.1, 1.1, musicGain);
+      playNote('violin', t, midiPitch(scale[idx]), dur * 1.1, 0.7, pannedDestination(musicGain, -0.15));
+      if (i % 3 === 0) {
+        playNote('cello', t, midiPitch(scale[0] - 12), dur * 1.7, 0.7, musicGain);
+      }
+      t += dur;
+    });
+    return t - startTime;
+  }
+
+  function scheduleBuildSection(startTime) {
+    const buildNotes = [0, 2, 4, 7, 0, 2, 4, 7, 0, 2, 4, 7, 0, 4, 7, 7];
+    let beat = 0.32;
+    let t = startTime;
+    buildNotes.forEach((idx, i) => {
+      const intensity = i / buildNotes.length;
+      playNote('violin', t, midiPitch(scale[idx] + 12), beat * 1.1, 0.4 + intensity * 0.6, pannedDestination(musicGain, i % 2 === 0 ? -0.3 : 0.3));
+      playNote('contrabass', t, midiPitch(scale[0] - 24), beat * 2.2, 0.5 + intensity * 0.4, musicGain);
+      playNote('timpani', t, 40, 0.4, 0.5 + intensity * 0.6, musicGain);
+      t += beat;
+      beat *= 0.955;
+    });
+    return t - startTime;
+  }
+
+  function scheduleFastSection(startTime) {
+    const totalDuration = melodySeq.reduce((sum, [, b]) => sum + b * beatDuration, 0);
+
+    playNote('organ', startTime, midiPitch(scale[0] - 24), totalDuration, 0.25, musicGain);
+
+    let t = startTime;
+    melodySeq.forEach(([idx, beats], i) => {
+      const dur = beats * beatDuration;
+      if (idx !== null) {
+        playNote('trumpet', t, midiPitch(scale[idx]), dur * 1.3, 1.1, pannedDestination(musicGain, -0.2));
+        playNote('trombone', t, midiPitch(scale[idx] - 12), dur * 1.3, 0.9, pannedDestination(musicGain, 0.2));
+        playNote('horn', t, midiPitch(scale[idx] - 7), dur * 1.3, 0.7, musicGain);
+        playNote('violin', t, midiPitch(scale[idx] + 12), dur * 1.1, 0.4, pannedDestination(musicGain, i % 2 === 0 ? -0.3 : 0.3));
+      }
+      playNote('timpani', t, 42, 0.35, i % 4 === 0 ? 0.8 : 0.5, musicGain);
+      thumpAt(t, musicGain, i % 4 === 0 ? 0.5 : 0.3);
+      playNote('contrabass', t, midiPitch(scale[0] - 24), dur * 2, 0.6, musicGain);
+      if (i % 4 === 3) {
+        playNote('accordion', t, midiPitch(scale[4]), beatDuration * 1.6, 0.6, musicGain);
+      }
+      t += dur;
+    });
+    return totalDuration;
   }
 
   function scheduleMusicLoop() {
     if (!musicStarted) return;
     const startTime = ctx.currentTime + 0.05;
     let t = startTime;
-    melodySeq.forEach(([idx, beats], i) => {
-      const dur = beats * beatDuration;
-      if (idx !== null) {
-        toneAt(t, freqFromSemitone(scale[idx]), dur * 0.9, musicGain, 'triangle', 0.5);
-      }
-      if (i % 4 === 0) {
-        thumpAt(t, musicGain, 0.35);
-        bassToneAt(t, freqFromSemitone(scale[0] - 12), beatDuration * 4 * 0.9, musicGain, 0.3);
-      }
-      t += dur;
-    });
-    const totalDuration = melodySeq.reduce((sum, [, b]) => sum + b * beatDuration, 0);
+    t += scheduleSlowSection(t);
+    t += scheduleBuildSection(t);
+    t += scheduleFastSection(t);
+    const totalDuration = t - startTime;
     musicTimer = setTimeout(scheduleMusicLoop, totalDuration * 1000);
   }
 
@@ -105,7 +201,9 @@ const AudioEngine = (() => {
     ensureCtx();
     if (musicStarted) return;
     musicStarted = true;
-    scheduleMusicLoop();
+    initInstruments(() => {
+      if (musicStarted) scheduleMusicLoop();
+    });
   }
 
   function stopMusic() {
