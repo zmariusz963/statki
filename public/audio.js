@@ -307,9 +307,17 @@ const AudioEngine = (() => {
       startMusic();
       document.removeEventListener('click', start);
       document.removeEventListener('touchstart', start);
+      document.removeEventListener('touchend', start);
     };
     document.addEventListener('click', start);
     document.addEventListener('touchstart', start);
+    document.addEventListener('touchend', start);
+
+    const resumeIfSuspended = () => {
+      if (ctx && ctx.state === 'suspended') ctx.resume();
+    };
+    document.addEventListener('click', resumeIfSuspended);
+    document.addEventListener('touchend', resumeIfSuspended);
   }
   armFirstInteractionStart();
 

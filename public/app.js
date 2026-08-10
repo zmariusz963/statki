@@ -19,6 +19,8 @@ const screens = {
   pass: document.getElementById('screen-pass'),
   place: document.getElementById('screen-place'),
   game: document.getElementById('screen-game'),
+  multiSetup: document.getElementById('screen-multi-setup'),
+  target: document.getElementById('screen-target'),
 };
 
 function showScreen(name) {
@@ -634,6 +636,7 @@ function onOnlineReady(ships) {
 }
 
 document.getElementById('btn-create').onclick = () => {
+  BOARD_SIZE = 10;
   connect();
   ws.onopen = () => ws.send(JSON.stringify({ type: 'create' }));
 };
@@ -641,6 +644,7 @@ document.getElementById('btn-create').onclick = () => {
 document.getElementById('btn-join').onclick = () => {
   const code = document.getElementById('input-code').value.trim().toUpperCase();
   if (!code) return;
+  BOARD_SIZE = 10;
   connect();
   ws.onopen = () => ws.send(JSON.stringify({ type: 'join', code }));
 };
@@ -750,6 +754,7 @@ const local = {
 };
 
 document.getElementById('btn-local').onclick = () => {
+  BOARD_SIZE = 10;
   local.ships = [null, null];
   local.hits = [new Set(), new Set()];
   local.turn = 0;
@@ -870,4 +875,313 @@ function fireLocal(x, y, shooter, target) {
       startLocalTurn();
     });
   }, 1200);
+}
+
+// ---------- Multi (3-4 players, hotseat + computer) mode ----------
+
+const multi = {
+  playerCount: 0,
+  computerCount: 0,
+  humanCount: 0,
+  isAI: [],
+  humanQueue: [],
+  ships: [],
+  hits: [],
+  alive: [],
+  currentPlayer: 0,
+};
+
+function playerName(i) {
+  return i < multi.humanCount ? `Gracz ${i + 1}` : `Komputer ${i - multi.humanCount + 1}`;
+}
+
+function cellConflictsWithSet(set, x, y) {
+  for (let dx = -1; dx <= 1; dx++) {
+    for (let dy = -1; dy <= 1; dy++) {
+      if (set.has(`${x + dx},${y + dy}`)) return true;
+    }
+  }
+  return false;
+}
+
+function randomAIFleet() {
+  const occupied = new Set();
+  const ships = [];
+  SHIP_DEFS.forEach((def) => {
+    let placed = false;
+    let attempts = 0;
+    while (!placed && attempts < 400) {
+      attempts++;
+      const rotation = Math.floor(Math.random() * 4);
+      const mirrored = Math.random() < 0.5;
+      const x = Math.floor(Math.random() * BOARD_SIZE);
+      const y = Math.floor(Math.random() * BOARD_SIZE);
+      const cells = shapeCells(x, y, def.shape, rotation, mirrored);
+      if (!cellsInBounds(cells)) continue;
+      if (cells.some(([cx, cy]) => cellConflictsWithSet(occupied, cx, cy))) continue;
+      cells.forEach(([cx, cy]) => occupied.add(`${cx},${cy}`));
+      ships.push({ cells });
+      placed = true;
+    }
+  });
+  return ships;
+}
+
+document.getElementById('btn-multi').onclick = () => {
+  multi.playerCount = 0;
+  multi.computerCount = 0;
+  showScreen('multiSetup');
+  renderMultiTotalButtons();
+  renderMultiComputerButtons();
+};
+
+function renderMultiTotalButtons() {
+  const container = document.getElementById('multi-total-buttons');
+  container.innerHTML = '';
+  [2, 3, 4].forEach((n) => {
+    const btn = document.createElement('button');
+    btn.textContent = `${n} graczy`;
+    if (multi.playerCount === n) btn.style.boxShadow = '0 0 0 2px #1d9e75';
+    btn.onclick = () => {
+      multi.playerCount = n;
+      if (multi.computerCount > n - 1) multi.computerCount = n - 1;
+      renderMultiTotalButtons();
+      renderMultiComputerButtons();
+    };
+    container.appendChild(btn);
+  });
+}
+
+function renderMultiComputerButtons() {
+  const container = document.getElementById('multi-computer-buttons');
+  container.innerHTML = '';
+  if (!multi.playerCount) return;
+  for (let c = 0; c <= multi.playerCount - 1; c++) {
+    const btn = document.createElement('button');
+    btn.textContent = String(c);
+    if (multi.computerCount === c) btn.style.boxShadow = '0 0 0 2px #1d9e75';
+    btn.onclick = () => {
+      multi.computerCount = c;
+      renderMultiComputerButtons();
+    };
+    container.appendChild(btn);
+  }
+}
+
+document.getElementById('btn-multi-start').onclick = () => {
+  if (!multi.playerCount) return;
+  const total = multi.playerCount;
+  const computerCount = multi.computerCount;
+  multi.humanCount = total - computerCount;
+  multi.isAI = new Array(total).fill(false);
+  for (let i = multi.humanCount; i < total; i++) multi.isAI[i] = true;
+  startMultiSetupComplete();
+};
+
+function startMultiSetupComplete() {
+  const total = multi.playerCount;
+  BOARD_SIZE = 10 + 2 * (total - 2);
+  multi.ships = new Array(total).fill(null);
+  multi.hits = Array.from({ length: total }, () => new Set());
+  multi.alive = new Array(total).fill(true);
+
+  for (let i = 0; i < total; i++) {
+    if (multi.isAI[i]) multi.ships[i] = randomAIFleet();
+  }
+
+  multi.humanQueue = [];
+  for (let i = 0; i < total; i++) {
+    if (!multi.isAI[i]) multi.humanQueue.push(i);
+  }
+
+  beginNextHumanPlacement(0);
+}
+
+function beginNextHumanPlacement(queueIdx) {
+  if (queueIdx >= multi.humanQueue.length) {
+    multi.currentPlayer = 0;
+    showPass('Wszyscy gotowi', 'Wszystkie statki rozstawione. Zaczynamy!', () => {
+      beginMultiTurn(multi.currentPlayer);
+    });
+    return;
+  }
+  const playerIdx = multi.humanQueue[queueIdx];
+  showPass(playerName(playerIdx), `${playerName(playerIdx)}, rozstaw swoje statki. Kliknij Dalej gdy telefon jest u Ciebie.`, () => {
+    startPlacementUI((ships) => {
+      multi.ships[playerIdx] = ships;
+      beginNextHumanPlacement(queueIdx + 1);
+    });
+  });
+}
+
+function aliveOpponentsOf(player) {
+  const result = [];
+  for (let i = 0; i < multi.playerCount; i++) {
+    if (i !== player && multi.alive[i]) result.push(i);
+  }
+  return result;
+}
+
+function nextAlivePlayer(after) {
+  for (let step = 1; step <= multi.playerCount; step++) {
+    const idx = (after + step) % multi.playerCount;
+    if (multi.alive[idx]) return idx;
+  }
+  return after;
+}
+
+function beginMultiTurn(player) {
+  if (multi.isAI[player]) {
+    announceAITurn(player);
+  } else {
+    showPass(playerName(player), `${playerName(player)}, kliknij Dalej gdy telefon jest u Ciebie.`, () => {
+      startHumanTurn(player);
+    });
+  }
+}
+
+function announceAITurn(player) {
+  showScreen('pass');
+  document.getElementById('pass-title').textContent = playerName(player);
+  document.getElementById('pass-message').textContent = `${playerName(player)} (komputer) namierza cel...`;
+  document.getElementById('btn-pass-continue').classList.add('hidden');
+  setTimeout(() => {
+    document.getElementById('btn-pass-continue').classList.remove('hidden');
+    runAITurn(player);
+  }, 900);
+}
+
+function startHumanTurn(player) {
+  const opponents = aliveOpponentsOf(player);
+  if (opponents.length === 1) {
+    startMultiFireScreen(player, opponents[0]);
+  } else {
+    showScreen('target');
+    document.getElementById('target-title').textContent = `${playerName(player)}, wybierz cel`;
+    const container = document.getElementById('target-buttons');
+    container.innerHTML = '';
+    opponents.forEach((oppIdx) => {
+      const btn = document.createElement('button');
+      btn.textContent = playerName(oppIdx);
+      btn.onclick = () => startMultiFireScreen(player, oppIdx);
+      container.appendChild(btn);
+    });
+  }
+}
+
+function runAITurn(player) {
+  const opponents = aliveOpponentsOf(player);
+  const target = opponents[Math.floor(Math.random() * opponents.length)];
+  const emptyCells = [];
+  for (let y = 0; y < BOARD_SIZE; y++) {
+    for (let x = 0; x < BOARD_SIZE; x++) {
+      if (!multi.hits[target].has(`${x},${y}`)) emptyCells.push([x, y]);
+    }
+  }
+  const [x, y] = emptyCells[Math.floor(Math.random() * emptyCells.length)];
+
+  startMultiFireScreen(player, target);
+  document.getElementById('turn-indicator').textContent = `${playerName(player)} (komputer) strzela...`;
+  setTimeout(() => {
+    fireMulti(x, y, player, target);
+  }, 500);
+}
+
+function cellStateMulti(targetIdx, x, y) {
+  const key = `${x},${y}`;
+  if (!multi.hits[targetIdx].has(key)) return null;
+  const ship = multi.ships[targetIdx].find(s => s.cells.some(([sx, sy]) => sx === x && sy === y));
+  if (!ship) return 'miss';
+  const sunk = ship.cells.every(([sx, sy]) => multi.hits[targetIdx].has(`${sx},${sy}`));
+  return sunk ? 'sunk' : 'hit';
+}
+
+function shipFullySunkMulti(targetIdx, ship) {
+  return ship.cells.every(([x, y]) => multi.hits[targetIdx].has(`${x},${y}`));
+}
+
+function startMultiFireScreen(shooter, target) {
+  showScreen('game');
+  const gm = document.getElementById('game-message');
+  gm.textContent = '';
+  gm.classList.remove('game-over-banner');
+  document.getElementById('enemy-board-title').textContent = playerName(target);
+  document.getElementById('own-board-title').textContent = `${playerName(shooter)} (Ty)`;
+  document.getElementById('turn-indicator').textContent = `${playerName(shooter)} - Twoja tura, strzelaj!`;
+  pulseTurnIndicator();
+
+  const enemyGrid = buildBoard('enemy-board', {
+    getCellClass: (x, y) => [multi.hits[target].has(`${x},${y}`) ? cellStateMulti(target, x, y) : null],
+    getCellContent: (x, y) => multi.hits[target].has(`${x},${y}`) ? symbolForState(cellStateMulti(target, x, y)) : '',
+    onClick: (x, y) => fireMulti(x, y, shooter, target),
+  });
+  const sunkTargetShips = multi.ships[target].filter(ship => shipFullySunkMulti(target, ship));
+  renderShipOverlays(enemyGrid, sunkTargetShips, () => true);
+
+  const ownGrid = buildBoard('own-board', {
+    small: true,
+    getCellClass: (x, y) => [multi.hits[shooter].has(`${x},${y}`) ? cellStateMulti(shooter, x, y) : null],
+    getCellContent: (x, y) => multi.hits[shooter].has(`${x},${y}`) ? symbolForState(cellStateMulti(shooter, x, y)) : '',
+  });
+  renderShipOverlays(ownGrid, multi.ships[shooter], (ship) => shipFullySunkMulti(shooter, ship));
+}
+
+function advanceMultiTurn(shooter) {
+  const next = nextAlivePlayer(shooter);
+  multi.currentPlayer = next;
+  setTimeout(() => beginMultiTurn(next), 1200);
+}
+
+function fireMulti(x, y, shooter, target) {
+  const key = `${x},${y}`;
+  if (multi.hits[target].has(key)) return;
+
+  AudioEngine.playCannonShot();
+  spawnProjectile(document.querySelector('#enemy-board .grid'), x, y);
+  multi.hits[target].add(key);
+  const hitShip = multi.ships[target].find(s => s.cells.some(([sx, sy]) => sx === x && sy === y));
+  const isHit = !!hitShip;
+  const shipJustSunk = isHit && shipFullySunkMulti(target, hitShip);
+  const targetAllSunk = multi.ships[target].every(s => shipFullySunkMulti(target, s));
+
+  const enemyGrid = buildBoard('enemy-board', {
+    getCellClass: (cx, cy) => [multi.hits[target].has(`${cx},${cy}`) ? cellStateMulti(target, cx, cy) : null],
+    getCellContent: (cx, cy) => multi.hits[target].has(`${cx},${cy}`) ? symbolForState(cellStateMulti(target, cx, cy)) : '',
+    onClick: () => {},
+  });
+  const sunkTargetShips = multi.ships[target].filter(ship => shipFullySunkMulti(target, ship));
+  renderShipOverlays(enemyGrid, sunkTargetShips, () => true);
+  triggerCellAnimation('enemy-board', x, y, isHit);
+
+  if (shipJustSunk) {
+    const { cx, cy } = shipCenterPercent(hitShip.cells);
+    spawnSinkBurst(enemyGrid, cx, cy);
+    AudioEngine.playExplosion();
+  } else if (isHit) {
+    spawnHitPoof(enemyGrid, x, y);
+    AudioEngine.playHitImpact();
+  } else {
+    spawnMissRipple(enemyGrid, x, y);
+    AudioEngine.playSplash();
+  }
+
+  if (targetAllSunk) {
+    multi.alive[target] = false;
+  }
+
+  const aliveCount = multi.alive.filter(Boolean).length;
+  if (aliveCount <= 1) {
+    const winnerIdx = multi.alive.findIndex(Boolean);
+    const gm = document.getElementById('game-message');
+    gm.textContent = `${playerName(winnerIdx)} wygrywa!`;
+    gm.classList.add('game-over-banner');
+    document.getElementById('turn-indicator').textContent = 'Koniec gry';
+    return;
+  }
+
+  document.getElementById('game-message').textContent = targetAllSunk
+    ? `Zatopiona cala flota gracza: ${playerName(target)}!`
+    : (isHit ? 'Trafienie!' : 'Pudlo.');
+
+  advanceMultiTurn(shooter);
 }
