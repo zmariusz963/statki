@@ -6,11 +6,16 @@ document.getElementById('btn-mute').onclick = () => {
 };
 
 const SHIP_DEFS = [
-  { name: 'Lotniskowiec (5)', shape: [[0, 0], [1, 0], [2, 0], [3, 0], [4, 0]] },
-  { name: 'Pancernik (4)', shape: [[0, 0], [1, 0], [2, 0], [3, 0]] },
-  { name: 'Krazownik (3)', shape: [[0, 0], [1, 0], [2, 0]] },
-  { name: 'Okret podwodny (3)', shape: [[0, 0], [1, 0], [2, 0]] },
-  { name: 'Niszczyciel (2)', shape: [[0, 0], [1, 0]] },
+  { name: 'Czteromasztowiec', shape: [[0, 0], [1, 0], [2, 0], [3, 0]] },
+  { name: 'Trojmasztowiec 1', shape: [[0, 0], [1, 0], [2, 0]] },
+  { name: 'Trojmasztowiec 2', shape: [[0, 0], [1, 0], [2, 0]] },
+  { name: 'Dwumasztowiec 1', shape: [[0, 0], [1, 0]] },
+  { name: 'Dwumasztowiec 2', shape: [[0, 0], [1, 0]] },
+  { name: 'Dwumasztowiec 3', shape: [[0, 0], [1, 0]] },
+  { name: 'Jednomasztowiec 1', shape: [[0, 0]] },
+  { name: 'Jednomasztowiec 2', shape: [[0, 0]] },
+  { name: 'Jednomasztowiec 3', shape: [[0, 0]] },
+  { name: 'Jednomasztowiec 4', shape: [[0, 0]] },
 ];
 
 const screens = {
@@ -21,6 +26,7 @@ const screens = {
   game: document.getElementById('screen-game'),
   multiSetup: document.getElementById('screen-multi-setup'),
   target: document.getElementById('screen-target'),
+  onlineSetup: document.getElementById('screen-online-setup'),
 };
 
 function showScreen(name) {
@@ -575,15 +581,25 @@ document.getElementById('btn-ready').onclick = () => {
   if (onPlacementReady) onPlacementReady(placedShipsList());
 };
 
-// ---------- Online mode ----------
+// ---------- Online mode (2-4 players over the network) ----------
 
 let ws;
 let playerIdx = null;
 let roomCode = null;
 let myTurn = false;
-let enemyHits = {};
-let ownHits = {};
-let sunkEnemyShips = [];
+
+const netMulti = {
+  playerCount: 2,
+  hits: [],
+  sunkShips: [],
+  alive: [],
+  viewTarget: null,
+};
+
+function onlinePlayerName(i) {
+  if (i === playerIdx) return 'Ty';
+  return `Gracz ${i + 1}`;
+}
 
 function connect() {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
@@ -599,62 +615,95 @@ function handleMessage(msg) {
     case 'created':
       roomCode = msg.code;
       playerIdx = msg.playerIdx;
+      netMulti.playerCount = msg.playerCount;
+      BOARD_SIZE = 10 + 2 * (msg.playerCount - 2);
       document.getElementById('room-code').textContent = roomCode;
+      updateWaitingHint(msg.joinedCount, msg.playerCount);
       showScreen('waiting');
       break;
     case 'joined':
       roomCode = msg.code;
       playerIdx = msg.playerIdx;
-      startPlacementUI(onOnlineReady);
+      netMulti.playerCount = msg.playerCount;
+      BOARD_SIZE = 10 + 2 * (msg.playerCount - 2);
+      if (msg.joinedCount < msg.playerCount) {
+        document.getElementById('room-code').textContent = roomCode;
+        updateWaitingHint(msg.joinedCount, msg.playerCount);
+        showScreen('waiting');
+      } else {
+        startPlacementUI(onOnlineReady);
+      }
       break;
-    case 'opponent_joined':
-      startPlacementUI(onOnlineReady);
+    case 'player_joined':
+      if (msg.joinedCount >= msg.playerCount) {
+        startPlacementUI(onOnlineReady);
+      } else {
+        updateWaitingHint(msg.joinedCount, msg.playerCount);
+      }
       break;
     case 'error':
       document.getElementById('lobby-message').textContent = msg.message;
       break;
     case 'opponent_ready':
-      document.getElementById('place-message').textContent = 'Przeciwnik jest gotowy. Czekamy na Ciebie.';
+      document.getElementById('place-message').textContent = 'Przynajmniej jeden przeciwnik jest gotowy.';
       break;
     case 'start':
-      myTurn = msg.yourTurn;
+      playerIdx = msg.yourIdx;
+      netMulti.playerCount = msg.playerCount;
+      myTurn = msg.turn === playerIdx;
       startOnlineGame();
       break;
     case 'fire_result':
       applyOnlineFireResult(msg);
       break;
     case 'opponent_left':
-      document.getElementById('game-message').textContent = 'Przeciwnik opuscil gre.';
+      document.getElementById('game-message').textContent = 'Jeden z graczy opuscil gre.';
       break;
   }
+}
+
+function updateWaitingHint(joinedCount, playerCount) {
+  document.getElementById('waiting-hint').textContent = `Czekam na graczy... (${joinedCount}/${playerCount} dolaczylo)`;
 }
 
 function onOnlineReady(ships) {
   ws.send(JSON.stringify({ type: 'place_ships', ships }));
   document.getElementById('btn-ready').disabled = true;
-  document.getElementById('place-message').textContent = 'Czekamy na przeciwnika...';
+  document.getElementById('place-message').textContent = 'Czekamy na pozostalych graczy...';
 }
 
 document.getElementById('btn-create').onclick = () => {
-  BOARD_SIZE = 10;
-  connect();
-  ws.onopen = () => ws.send(JSON.stringify({ type: 'create' }));
+  showScreen('onlineSetup');
+  const container = document.getElementById('online-count-buttons');
+  container.innerHTML = '';
+  [2, 3, 4].forEach((n) => {
+    const btn = document.createElement('button');
+    btn.textContent = `${n} graczy`;
+    btn.onclick = () => {
+      BOARD_SIZE = 10 + 2 * (n - 2);
+      connect();
+      ws.onopen = () => ws.send(JSON.stringify({ type: 'create', playerCount: n }));
+    };
+    container.appendChild(btn);
+  });
 };
 
 document.getElementById('btn-join').onclick = () => {
   const code = document.getElementById('input-code').value.trim().toUpperCase();
   if (!code) return;
-  BOARD_SIZE = 10;
   connect();
   ws.onopen = () => ws.send(JSON.stringify({ type: 'join', code }));
 };
 
 function startOnlineGame() {
   showScreen('game');
-  enemyHits = {};
-  ownHits = {};
-  sunkEnemyShips = [];
+  netMulti.hits = Array.from({ length: netMulti.playerCount }, () => ({}));
+  netMulti.sunkShips = Array.from({ length: netMulti.playerCount }, () => []);
+  netMulti.alive = new Array(netMulti.playerCount).fill(true);
+  netMulti.viewTarget = aliveOpponentsOnline()[0];
   document.getElementById('game-message').classList.remove('game-over-banner');
+  document.getElementById('own-board-title').textContent = 'Ty';
+  renderOnlineTargetSwitcher();
   buildEnemyBoardOnline();
   buildOwnBoardOnline();
   updateTurnIndicator();
@@ -668,79 +717,128 @@ function pulseTurnIndicator() {
 }
 
 function updateTurnIndicator() {
-  document.getElementById('turn-indicator').textContent = myTurn ? 'Twoja tura - strzelaj!' : 'Tura przeciwnika...';
+  document.getElementById('turn-indicator').textContent = myTurn ? 'Twoja tura - strzelaj!' : 'Czekaj na swoja ture...';
   pulseTurnIndicator();
 }
 
-function buildEnemyBoardOnline() {
-  const grid = buildBoard('enemy-board', {
-    getCellClass: (x, y) => [enemyHits[`${x},${y}`] || null],
-    getCellContent: (x, y) => symbolForState(enemyHits[`${x},${y}`]),
-    onClick: fireOnline,
+function aliveOpponentsOnline() {
+  const result = [];
+  for (let i = 0; i < netMulti.playerCount; i++) {
+    if (i !== playerIdx && netMulti.alive[i]) result.push(i);
+  }
+  return result;
+}
+
+function renderOnlineTargetSwitcher() {
+  const container = document.getElementById('online-target-switcher');
+  const opponents = aliveOpponentsOnline();
+  if (netMulti.playerCount <= 2 || opponents.length <= 1) {
+    container.classList.add('hidden');
+    return;
+  }
+  container.classList.remove('hidden');
+  container.innerHTML = '';
+  opponents.forEach((i) => {
+    const btn = document.createElement('button');
+    btn.textContent = onlinePlayerName(i);
+    if (i === netMulti.viewTarget) btn.style.boxShadow = '0 0 0 2px #1d9e75';
+    btn.onclick = () => {
+      netMulti.viewTarget = i;
+      renderOnlineTargetSwitcher();
+      buildEnemyBoardOnline();
+    };
+    container.appendChild(btn);
   });
-  renderShipOverlays(grid, sunkEnemyShips, () => true);
+}
+
+function buildEnemyBoardOnline() {
+  const target = netMulti.viewTarget;
+  document.getElementById('enemy-board-title').textContent = target === null ? 'Przeciwnik' : onlinePlayerName(target);
+  const hits = target === null ? {} : netMulti.hits[target];
+  const grid = buildBoard('enemy-board', {
+    getCellClass: (x, y) => [hits[`${x},${y}`] || null],
+    getCellContent: (x, y) => symbolForState(hits[`${x},${y}`]),
+    onClick: (x, y) => fireOnline(x, y, target),
+  });
+  renderShipOverlays(grid, target === null ? [] : netMulti.sunkShips[target], () => true);
 }
 
 function buildOwnBoardOnline() {
+  const myHits = netMulti.hits[playerIdx] || {};
   const grid = buildBoard('own-board', {
     small: true,
-    getCellClass: (x, y) => [ownHits[`${x},${y}`] || null],
-    getCellContent: (x, y) => symbolForState(ownHits[`${x},${y}`]),
+    getCellClass: (x, y) => [myHits[`${x},${y}`] || null],
+    getCellContent: (x, y) => symbolForState(myHits[`${x},${y}`]),
   });
-  renderShipOverlays(grid, placedShipsList(), (ship) => ship.cells.every(([x, y]) => ownHits[`${x},${y}`] === 'sunk'));
+  renderShipOverlays(grid, placedShipsList(), (ship) => ship.cells.every(([x, y]) => myHits[`${x},${y}`] === 'sunk'));
 }
 
-function fireOnline(x, y) {
-  if (!myTurn) return;
+function fireOnline(x, y, target) {
+  if (!myTurn || target === null || target === undefined) return;
   const key = `${x},${y}`;
-  if (enemyHits[key]) return;
+  if (netMulti.hits[target][key]) return;
   AudioEngine.playCannonShot();
   spawnProjectile(document.querySelector('#enemy-board .grid'), x, y);
-  ws.send(JSON.stringify({ type: 'fire', x, y }));
+  ws.send(JSON.stringify({ type: 'fire', x, y, target }));
 }
 
 function applyOnlineFireResult(msg) {
   const key = `${msg.x},${msg.y}`;
-  const iFired = myTurn;
-  const targetHits = iFired ? enemyHits : ownHits;
+  const iFired = msg.shooter === playerIdx;
+  const iAmTarget = msg.target === playerIdx;
+  const targetHits = netMulti.hits[msg.target];
   targetHits[key] = msg.hit ? 'hit' : 'miss';
 
   if (msg.sunk && msg.sunkCells) {
     msg.sunkCells.forEach(([sx, sy]) => {
       targetHits[`${sx},${sy}`] = 'sunk';
     });
-    if (iFired) sunkEnemyShips.push({ cells: msg.sunkCells });
+    netMulti.sunkShips[msg.target].push({ cells: msg.sunkCells });
   }
 
+  if (msg.targetEliminated) {
+    netMulti.alive[msg.target] = false;
+    if (netMulti.viewTarget === msg.target) {
+      const remaining = aliveOpponentsOnline();
+      netMulti.viewTarget = remaining.length ? remaining[0] : null;
+    }
+  }
+
+  renderOnlineTargetSwitcher();
   buildEnemyBoardOnline();
   buildOwnBoardOnline();
-  triggerCellAnimation(iFired ? 'enemy-board' : 'own-board', msg.x, msg.y, msg.hit);
 
-  const boardId = iFired ? 'enemy-board' : 'own-board';
-  const boardGrid = document.querySelector(`#${boardId} .grid`);
-  if (msg.sunk && msg.sunkCells) {
-    const { cx, cy } = shipCenterPercent(msg.sunkCells);
-    spawnSinkBurst(boardGrid, cx, cy);
-    AudioEngine.playExplosion();
-  } else if (msg.hit) {
-    spawnHitPoof(boardGrid, msg.x, msg.y);
-    AudioEngine.playHitImpact();
-  } else {
-    spawnMissRipple(boardGrid, msg.x, msg.y);
-    AudioEngine.playSplash();
+  const involvesMyView = msg.target === netMulti.viewTarget || iAmTarget;
+  if (involvesMyView) {
+    const boardId = iAmTarget ? 'own-board' : 'enemy-board';
+    triggerCellAnimation(boardId, msg.x, msg.y, msg.hit);
+    const boardGrid = document.querySelector(`#${boardId} .grid`);
+    if (msg.sunk && msg.sunkCells) {
+      const { cx, cy } = shipCenterPercent(msg.sunkCells);
+      spawnSinkBurst(boardGrid, cx, cy);
+      AudioEngine.playExplosion();
+    } else if (msg.hit) {
+      spawnHitPoof(boardGrid, msg.x, msg.y);
+      AudioEngine.playHitImpact();
+    } else {
+      spawnMissRipple(boardGrid, msg.x, msg.y);
+      AudioEngine.playSplash();
+    }
   }
 
   myTurn = msg.nextTurn === playerIdx;
   updateTurnIndicator();
 
+  const gm = document.getElementById('game-message');
   if (msg.gameOver) {
-    const gm = document.getElementById('game-message');
-    gm.textContent = iFired ? 'Wygrywasz! Wszystkie statki przeciwnika zatopione.' : 'Przegrywasz! Twoja flota zatopiona.';
+    gm.textContent = msg.winner === playerIdx ? 'Wygrywasz! Zostajesz jedynym niezatopionym graczem.' : `${onlinePlayerName(msg.winner)} wygrywa!`;
     gm.classList.add('game-over-banner');
+  } else if (msg.targetEliminated) {
+    gm.textContent = iAmTarget ? 'Twoja flota zostala zatopiona - wypadasz z gry.' : `${onlinePlayerName(msg.target)} zostaje wyeliminowany!`;
   } else if (msg.hit) {
-    document.getElementById('game-message').textContent = iFired ? 'Trafienie!' : 'Przeciwnik trafil.';
+    gm.textContent = iFired ? 'Trafienie!' : (iAmTarget ? `${onlinePlayerName(msg.shooter)} Cie trafil.` : 'Trafienie u innego gracza.');
   } else {
-    document.getElementById('game-message').textContent = iFired ? 'Pudlo.' : 'Przeciwnik nie trafil.';
+    gm.textContent = iFired ? 'Pudlo.' : (iAmTarget ? `${onlinePlayerName(msg.shooter)} nie trafil.` : 'Pudlo u innego gracza.');
   }
 }
 

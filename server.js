@@ -12,8 +12,11 @@ const MIME = {
   '.js': 'application/javascript',
 };
 
-const SHIP_SIZES = [5, 4, 3, 3, 2];
-const BOARD_SIZE = 10;
+const SHIP_SIZES = [4, 3, 3, 2, 2, 2, 1, 1, 1, 1];
+
+function boardSizeForCount(n) {
+  return 10 + 2 * (n - 2);
+}
 
 const server = http.createServer((req, res) => {
   let filePath = req.url === '/' ? '/index.html' : req.url;
@@ -33,7 +36,7 @@ const server = http.createServer((req, res) => {
 
 const wss = new WebSocketServer({ server });
 
-// rooms: code -> { players: [ws, ws], boards: [board, board], ready: [bool, bool], turn: 0, started: bool }
+// rooms: code -> { playerCount, boardSize, players, ships, hits, ready, alive, turn, started, joinedCount }
 const rooms = new Map();
 
 function makeRoomCode() {
@@ -48,7 +51,13 @@ function send(ws, msg) {
   if (ws && ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg));
 }
 
-function validateShips(ships) {
+function broadcast(room, msg, exceptIdx) {
+  room.players.forEach((ws, i) => {
+    if (i !== exceptIdx) send(ws, msg);
+  });
+}
+
+function validateShips(ships, boardSize) {
   if (!Array.isArray(ships) || ships.length !== SHIP_SIZES.length) return false;
   const occupied = new Set();
   const sizesUsed = ships.map(s => s.cells.length).sort((a, b) => b - a);
@@ -57,7 +66,7 @@ function validateShips(ships) {
 
   for (const ship of ships) {
     for (const [x, y] of ship.cells) {
-      if (x < 0 || x >= BOARD_SIZE || y < 0 || y >= BOARD_SIZE) return false;
+      if (x < 0 || x >= boardSize || y < 0 || y >= boardSize) return false;
       const key = `${x},${y}`;
       if (occupied.has(key)) return false;
       occupied.add(key);
@@ -66,12 +75,16 @@ function validateShips(ships) {
   return true;
 }
 
-function otherPlayer(room, idx) {
-  return room.players[idx === 0 ? 1 : 0];
-}
-
 function checkAllSunk(ships, hits) {
   return ships.every(ship => ship.cells.every(([x, y]) => hits.has(`${x},${y}`)));
+}
+
+function nextAlivePlayer(room, after) {
+  for (let step = 1; step <= room.playerCount; step++) {
+    const idx = (after + step) % room.playerCount;
+    if (room.alive[idx]) return idx;
+  }
+  return after;
 }
 
 wss.on('connection', (ws) => {
@@ -87,32 +100,46 @@ wss.on('connection', (ws) => {
     }
 
     if (msg.type === 'create') {
+      const playerCount = [2, 3, 4].includes(msg.playerCount) ? msg.playerCount : 2;
       const code = makeRoomCode();
-      rooms.set(code, {
-        players: [ws, null],
-        ships: [null, null],
-        hits: [new Set(), new Set()],
-        ready: [false, false],
+      const room = {
+        playerCount,
+        boardSize: boardSizeForCount(playerCount),
+        players: new Array(playerCount).fill(null),
+        ships: new Array(playerCount).fill(null),
+        hits: Array.from({ length: playerCount }, () => new Set()),
+        ready: new Array(playerCount).fill(false),
+        alive: new Array(playerCount).fill(true),
         turn: 0,
         started: false,
-      });
+        joinedCount: 0,
+      };
+      room.players[0] = ws;
+      room.joinedCount = 1;
+      rooms.set(code, room);
       ws.roomCode = code;
       ws.playerIdx = 0;
-      send(ws, { type: 'created', code, playerIdx: 0 });
+      send(ws, { type: 'created', code, playerIdx: 0, playerCount, joinedCount: 1 });
       return;
     }
 
     if (msg.type === 'join') {
       const room = rooms.get(msg.code);
-      if (!room || room.players[1]) {
-        send(ws, { type: 'error', message: 'Nieprawidlowy kod pokoju lub pokoj jest pelny.' });
+      if (!room) {
+        send(ws, { type: 'error', message: 'Nieprawidlowy kod pokoju.' });
         return;
       }
-      room.players[1] = ws;
+      const freeIdx = room.players.findIndex(p => p === null);
+      if (freeIdx === -1) {
+        send(ws, { type: 'error', message: 'Pokoj jest pelny.' });
+        return;
+      }
+      room.players[freeIdx] = ws;
+      room.joinedCount += 1;
       ws.roomCode = msg.code;
-      ws.playerIdx = 1;
-      send(ws, { type: 'joined', code: msg.code, playerIdx: 1 });
-      send(room.players[0], { type: 'opponent_joined' });
+      ws.playerIdx = freeIdx;
+      send(ws, { type: 'joined', code: msg.code, playerIdx: freeIdx, playerCount: room.playerCount, joinedCount: room.joinedCount });
+      broadcast(room, { type: 'player_joined', joinedCount: room.joinedCount, playerCount: room.playerCount }, freeIdx);
       return;
     }
 
@@ -121,18 +148,20 @@ wss.on('connection', (ws) => {
     const idx = ws.playerIdx;
 
     if (msg.type === 'place_ships') {
-      if (!validateShips(msg.ships)) {
+      if (room.joinedCount < room.playerCount) return;
+      if (!validateShips(msg.ships, room.boardSize)) {
         send(ws, { type: 'error', message: 'Nieprawidlowe ustawienie statkow.' });
         return;
       }
       room.ships[idx] = msg.ships;
       room.ready[idx] = true;
-      send(otherPlayer(room, idx), { type: 'opponent_ready' });
+      broadcast(room, { type: 'opponent_ready', playerIdx: idx }, idx);
 
-      if (room.ready[0] && room.ready[1] && !room.started) {
+      if (room.ready.every(Boolean) && !room.started) {
         room.started = true;
-        send(room.players[0], { type: 'start', yourTurn: true });
-        send(room.players[1], { type: 'start', yourTurn: false });
+        room.players.forEach((playerWs, i) => {
+          send(playerWs, { type: 'start', yourIdx: i, playerCount: room.playerCount, turn: room.turn });
+        });
       }
       return;
     }
@@ -140,36 +169,47 @@ wss.on('connection', (ws) => {
     if (msg.type === 'fire') {
       if (!room.started) return;
       if (room.turn !== idx) return;
-      const { x, y } = msg;
-      if (x < 0 || x >= BOARD_SIZE || y < 0 || y >= BOARD_SIZE) return;
+      const { x, y, target } = msg;
+      if (typeof target !== 'number' || target === idx || !room.alive[target]) return;
+      if (x < 0 || x >= room.boardSize || y < 0 || y >= room.boardSize) return;
 
-      const targetIdx = idx === 0 ? 1 : 0;
       const key = `${x},${y}`;
-      if (room.hits[targetIdx].has(key)) return;
+      if (room.hits[target].has(key)) return;
 
-      room.hits[targetIdx].add(key);
-      const targetShips = room.ships[targetIdx];
+      room.hits[target].add(key);
+      const targetShips = room.ships[target];
       const hitShip = targetShips.find(ship => ship.cells.some(([sx, sy]) => sx === x && sy === y));
       const isHit = !!hitShip;
       let sunk = false;
       if (isHit) {
-        sunk = hitShip.cells.every(([sx, sy]) => room.hits[targetIdx].has(`${sx},${sy}`));
+        sunk = hitShip.cells.every(([sx, sy]) => room.hits[target].has(`${sx},${sy}`));
       }
 
-      const allSunk = checkAllSunk(targetShips, room.hits[targetIdx]);
-      if (!allSunk) room.turn = targetIdx;
+      const targetAllSunk = checkAllSunk(targetShips, room.hits[target]);
+      if (targetAllSunk) room.alive[target] = false;
+
+      const aliveCount = room.alive.filter(Boolean).length;
+      const gameOver = aliveCount <= 1;
+      const winner = gameOver ? room.alive.findIndex(Boolean) : null;
+
+      if (!gameOver) {
+        room.turn = nextAlivePlayer(room, idx);
+      }
 
       const resultMsg = {
         type: 'fire_result',
+        shooter: idx,
+        target,
         x, y,
         hit: isHit,
         sunk,
         sunkCells: sunk ? hitShip.cells : null,
-        gameOver: allSunk,
+        targetEliminated: targetAllSunk,
+        gameOver,
+        winner,
         nextTurn: room.turn,
       };
-      send(room.players[idx], resultMsg);
-      send(room.players[targetIdx], resultMsg);
+      broadcast(room, resultMsg, null);
       return;
     }
   });
@@ -177,8 +217,7 @@ wss.on('connection', (ws) => {
   ws.on('close', () => {
     const room = rooms.get(ws.roomCode);
     if (!room) return;
-    const otherIdx = ws.playerIdx === 0 ? 1 : 0;
-    send(room.players[otherIdx], { type: 'opponent_left' });
+    broadcast(room, { type: 'opponent_left' }, ws.playerIdx);
     rooms.delete(ws.roomCode);
   });
 });

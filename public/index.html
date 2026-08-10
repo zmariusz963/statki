@@ -23,6 +23,12 @@
   <p id="lobby-message" class="message"></p>
 </div>
 
+<div id="screen-online-setup" class="screen hidden">
+  <h1>Ile graczy online?</h1>
+  <p class="hint">Kazdy gracz dolacza na swoim urzadzeniu przez kod pokoju.</p>
+  <div id="online-count-buttons" class="place-controls"></div>
+</div>
+
 <div id="screen-multi-setup" class="screen hidden">
   <h1>Ustawienia gry</h1>
   <p class="hint">Ile graczy razem?</p>
@@ -42,7 +48,7 @@
   <h1>Pokoj utworzony</h1>
   <p>Podaj ten kod drugiemu graczowi:</p>
   <div id="room-code" class="room-code"></div>
-  <p class="hint">Czekam na dolaczenie gracza...</p>
+  <p id="waiting-hint" class="hint">Czekam na dolaczenie gracza...</p>
 </div>
 
 <div id="screen-pass" class="screen hidden">
@@ -67,6 +73,7 @@
 
 <div id="screen-game" class="screen hidden">
   <p id="turn-indicator" class="turn-indicator"></p>
+  <div id="online-target-switcher" class="place-controls hidden" style="flex-wrap: wrap;"></div>
   <div class="boards-wrap">
     <div class="board-col">
       <h3 id="enemy-board-title">Przeciwnik</h3>
