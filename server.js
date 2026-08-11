@@ -126,6 +126,25 @@ function checkAllSunk(ships, hits) {
   return ships.every(ship => ship.cells.every(([x, y]) => hits.has(`${x},${y}`)));
 }
 
+function surroundingCells(shipCells) {
+  const shipSet = new Set(shipCells.map(([x, y]) => `${x},${y}`));
+  const seen = new Set();
+  const result = [];
+  shipCells.forEach(([x, y]) => {
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dy = -1; dy <= 1; dy++) {
+        const nx = x + dx, ny = y + dy;
+        const k = `${nx},${ny}`;
+        if (nx < 0 || nx >= BOARD_SIZE || ny < 0 || ny >= BOARD_SIZE) continue;
+        if (shipSet.has(k) || seen.has(k)) continue;
+        seen.add(k);
+        result.push([nx, ny]);
+      }
+    }
+  });
+  return result;
+}
+
 function otherSide(s) {
   return s === 'A' ? 'B' : 'A';
 }
@@ -252,6 +271,17 @@ wss.on('connection', (ws) => {
       const allSunk = checkAllSunk(targetShips, room.hits[target]);
       if (!allSunk) room.turn = target;
 
+      let autoMissCells = [];
+      if (sunk) {
+        surroundingCells(hitShip.cells).forEach(([sx, sy]) => {
+          const k = `${sx},${sy}`;
+          if (!room.hits[target].has(k)) {
+            room.hits[target].add(k);
+            autoMissCells.push([sx, sy]);
+          }
+        });
+      }
+
       const resultMsg = {
         type: 'fire_result',
         shooterSide: mySide,
@@ -259,6 +289,7 @@ wss.on('connection', (ws) => {
         hit: isHit,
         sunk,
         sunkCells: sunk ? hitShip.cells : null,
+        autoMissCells,
         gameOver: allSunk,
         winnerSide: allSunk ? mySide : null,
         nextTurn: room.turn,

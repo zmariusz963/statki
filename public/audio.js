@@ -70,7 +70,7 @@ const AudioEngine = (() => {
     ensureCtx();
     if (musicStarted || !bgMusic) return;
     musicStarted = true;
-    bgMusic.volume = 0.35;
+    bgMusic.volume = 0.12;
     bgMusic.muted = muted;
     bgMusic.play().catch(() => {});
   }

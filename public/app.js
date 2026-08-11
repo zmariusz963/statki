@@ -71,6 +71,25 @@ function cellsInBounds(cells) {
   return cells.every(([x, y]) => x >= 0 && x < BOARD_SIZE && y >= 0 && y < BOARD_SIZE);
 }
 
+function surroundingCells(shipCells) {
+  const shipSet = new Set(shipCells.map(([x, y]) => `${x},${y}`));
+  const seen = new Set();
+  const result = [];
+  shipCells.forEach(([x, y]) => {
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dy = -1; dy <= 1; dy++) {
+        const nx = x + dx, ny = y + dy;
+        const k = `${nx},${ny}`;
+        if (nx < 0 || nx >= BOARD_SIZE || ny < 0 || ny >= BOARD_SIZE) continue;
+        if (shipSet.has(k) || seen.has(k)) continue;
+        seen.add(k);
+        result.push([nx, ny]);
+      }
+    }
+  });
+  return result;
+}
+
 function shapeBoundingBox(shape) {
   const xs = shape.map(c => c[0]);
   const ys = shape.map(c => c[1]);
@@ -812,6 +831,12 @@ function applyOnlineSideFireResult(msg) {
     onlineSunkShips[targetSide].push({ cells: msg.sunkCells });
   }
 
+  if (msg.autoMissCells) {
+    msg.autoMissCells.forEach(([sx, sy]) => {
+      targetHits[`${sx},${sy}`] = 'miss';
+    });
+  }
+
   renderOnlineSideBoards();
 
   const boardId = iAmTargetSide ? 'own-board' : 'enemy-board';
@@ -993,6 +1018,10 @@ function fireSide(x, y, shooter, target) {
   const shipJustSunk = isHit && shipFullySunkSide(target, hitShip);
   const allSunk = side.ships[target].every(s => shipFullySunkSide(target, s));
 
+  if (shipJustSunk) {
+    surroundingCells(hitShip.cells).forEach(([sx, sy]) => side.hits[target].add(`${sx},${sy}`));
+  }
+
   const enemyGrid = buildBoard('enemy-board', {
     getCellClass: (cx, cy) => [side.hits[target].has(`${cx},${cy}`) ? cellStateSide(target, cx, cy) : null],
     getCellContent: (cx, cy) => side.hits[target].has(`${cx},${cy}`) ? symbolForState(cellStateSide(target, cx, cy)) : '',
@@ -1036,10 +1065,6 @@ document.getElementById('btn-mode-1v1').onclick = () => {
 
 document.getElementById('btn-mode-1vai').onclick = () => {
   startSideMode('Gracz 1', 'Komputer', true);
-};
-
-document.getElementById('btn-mode-2v2').onclick = () => {
-  startSideMode('Gracz 1 i Gracz 2', 'Gracz 3 i Gracz 4', false);
 };
 
 document.getElementById('btn-mode-2vai').onclick = () => {
