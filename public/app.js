@@ -5,6 +5,18 @@ document.getElementById('btn-mute').onclick = () => {
   document.getElementById('btn-mute').innerHTML = muted ? '&#128263;' : '&#128266;';
 };
 
+document.getElementById('btn-fullscreen').onclick = () => {
+  if (!document.fullscreenElement) {
+    document.documentElement.requestFullscreen().catch(() => {});
+  } else {
+    document.exitFullscreen().catch(() => {});
+  }
+};
+
+document.addEventListener('fullscreenchange', () => {
+  document.getElementById('btn-fullscreen').innerHTML = document.fullscreenElement ? '&#10006;' : '&#9974;';
+});
+
 const SHIP_DEFS = [
   { name: 'Czteromasztowiec', shape: [[0, 0], [1, 0], [2, 0], [3, 0]] },
   { name: 'Trojmasztowiec 1', shape: [[0, 0], [1, 0], [2, 0]] },
@@ -762,6 +774,11 @@ document.getElementById('btn-online-2v2').onclick = () => {
   ws.onopen = () => ws.send(JSON.stringify({ type: 'create', mode: '2v2' }));
 };
 
+document.getElementById('btn-online-2vai').onclick = () => {
+  connect();
+  ws.onopen = () => ws.send(JSON.stringify({ type: 'create', mode: '2vai' }));
+};
+
 document.getElementById('btn-join').onclick = () => {
   const code = document.getElementById('input-code').value.trim().toUpperCase();
   if (!code) return;
@@ -860,7 +877,7 @@ function applyOnlineSideFireResult(msg) {
 
   const gm = document.getElementById('game-message');
   if (msg.gameOver) {
-    gm.textContent = iAmShooterSide ? 'Wygrywacie! Cala flota przeciwnikow zatopiona.' : 'Przegrywacie! Wasza flota zostala zatopiona.';
+    gm.textContent = iAmShooterSide ? 'ZWYCIEZCA: Wy! Cala flota przeciwnikow zatopiona.' : 'ZWYCIEZCA: Przeciwnicy! Wasza flota zostala zatopiona.';
     gm.classList.add('game-over-banner');
   } else if (msg.hit) {
     gm.textContent = iAmShooterSide ? 'Trafienie!' : (iAmTargetSide ? 'Przeciwnicy Was trafili.' : 'Trafienie.');
@@ -1047,7 +1064,7 @@ function fireSide(x, y, shooter, target) {
     const gm = document.getElementById('game-message');
     gm.textContent = 'Zatopiony ostatni statek!';
     gm.classList.add('game-over-banner');
-    document.getElementById('turn-indicator').textContent = `${sideLabel(shooter)} wygrywa!`;
+    document.getElementById('turn-indicator').textContent = `ZWYCIEZCA: ${sideLabel(shooter)}!`;
     return;
   }
 
