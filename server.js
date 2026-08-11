@@ -13,10 +13,7 @@ const MIME = {
 };
 
 const SHIP_SIZES = [4, 3, 3, 2, 2, 2, 1, 1, 1, 1];
-
-function boardSizeForCount(n) {
-  return 10 + 2 * (n - 2);
-}
+const BOARD_SIZE = 10;
 
 const server = http.createServer((req, res) => {
   let filePath = req.url === '/' ? '/index.html' : req.url;
@@ -36,7 +33,12 @@ const server = http.createServer((req, res) => {
 
 const wss = new WebSocketServer({ server });
 
-// rooms: code -> { playerCount, boardSize, players, ships, hits, ready, alive, turn, started, joinedCount }
+// rooms: code -> {
+//   mode, seatsA, seatsB (human seat counts; 0 means that side is the computer),
+//   seats: { A: [ws|null, ...], B: [ws|null, ...] },
+//   ships: { A, B }, hits: { A: Set, B: Set }, ready: { A, B }, aiSide: 'A'|'B'|null,
+//   turn: 'A'|'B', started: bool,
+// }
 const rooms = new Map();
 
 function makeRoomCode() {
@@ -51,13 +53,19 @@ function send(ws, msg) {
   if (ws && ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg));
 }
 
-function broadcast(room, msg, exceptIdx) {
-  room.players.forEach((ws, i) => {
-    if (i !== exceptIdx) send(ws, msg);
-  });
+function broadcastRoom(room, msg) {
+  [...room.seats.A, ...room.seats.B].forEach(ws => send(ws, msg));
 }
 
-function validateShips(ships, boardSize) {
+function seatsConfigForMode(mode) {
+  if (mode === '1v1') return { seatsA: 1, seatsB: 1, aiSide: null };
+  if (mode === '1vai') return { seatsA: 1, seatsB: 0, aiSide: 'B' };
+  if (mode === '2v2') return { seatsA: 2, seatsB: 2, aiSide: null };
+  if (mode === '2vai') return { seatsA: 2, seatsB: 0, aiSide: 'B' };
+  return { seatsA: 1, seatsB: 1, aiSide: null };
+}
+
+function validateShips(ships) {
   if (!Array.isArray(ships) || ships.length !== SHIP_SIZES.length) return false;
   const occupied = new Set();
   const sizesUsed = ships.map(s => s.cells.length).sort((a, b) => b - a);
@@ -66,7 +74,7 @@ function validateShips(ships, boardSize) {
 
   for (const ship of ships) {
     for (const [x, y] of ship.cells) {
-      if (x < 0 || x >= boardSize || y < 0 || y >= boardSize) return false;
+      if (x < 0 || x >= BOARD_SIZE || y < 0 || y >= BOARD_SIZE) return false;
       const key = `${x},${y}`;
       if (occupied.has(key)) return false;
       occupied.add(key);
@@ -75,21 +83,72 @@ function validateShips(ships, boardSize) {
   return true;
 }
 
+function randomAIShips() {
+  const occupied = new Set();
+  const ships = [];
+  const conflicts = (x, y) => {
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dy = -1; dy <= 1; dy++) {
+        if (occupied.has(`${x + dx},${y + dy}`)) return true;
+      }
+    }
+    return false;
+  };
+  SHIP_SIZES.forEach((size) => {
+    let placed = false;
+    let attempts = 0;
+    while (!placed && attempts < 400) {
+      attempts++;
+      const horizontal = Math.random() < 0.5;
+      const x = Math.floor(Math.random() * BOARD_SIZE);
+      const y = Math.floor(Math.random() * BOARD_SIZE);
+      const cells = [];
+      let ok = true;
+      for (let i = 0; i < size; i++) {
+        const cx = horizontal ? x + i : x;
+        const cy = horizontal ? y : y + i;
+        if (cx >= BOARD_SIZE || cy >= BOARD_SIZE || conflicts(cx, cy)) {
+          ok = false;
+          break;
+        }
+        cells.push([cx, cy]);
+      }
+      if (!ok) continue;
+      cells.forEach(([cx, cy]) => occupied.add(`${cx},${cy}`));
+      ships.push({ cells });
+      placed = true;
+    }
+  });
+  return ships;
+}
+
 function checkAllSunk(ships, hits) {
   return ships.every(ship => ship.cells.every(([x, y]) => hits.has(`${x},${y}`)));
 }
 
-function nextAlivePlayer(room, after) {
-  for (let step = 1; step <= room.playerCount; step++) {
-    const idx = (after + step) % room.playerCount;
-    if (room.alive[idx]) return idx;
-  }
-  return after;
+function otherSide(s) {
+  return s === 'A' ? 'B' : 'A';
+}
+
+function seatCounts(room) {
+  return {
+    filledA: room.seats.A.filter(Boolean).length,
+    filledB: room.seats.B.filter(Boolean).length,
+  };
+}
+
+function maybeStartGame(room) {
+  if (room.started) return;
+  if (!room.ready.A || !room.ready.B) return;
+  room.started = true;
+  room.turn = 'A';
+  broadcastRoom(room, { type: 'start', turn: room.turn });
 }
 
 wss.on('connection', (ws) => {
   ws.roomCode = null;
-  ws.playerIdx = null;
+  ws.side = null;
+  ws.seatIndex = null;
 
   ws.on('message', (raw) => {
     let msg;
@@ -100,26 +159,28 @@ wss.on('connection', (ws) => {
     }
 
     if (msg.type === 'create') {
-      const playerCount = [2, 3, 4].includes(msg.playerCount) ? msg.playerCount : 2;
+      const { seatsA, seatsB, aiSide } = seatsConfigForMode(msg.mode);
       const code = makeRoomCode();
       const room = {
-        playerCount,
-        boardSize: boardSizeForCount(playerCount),
-        players: new Array(playerCount).fill(null),
-        ships: new Array(playerCount).fill(null),
-        hits: Array.from({ length: playerCount }, () => new Set()),
-        ready: new Array(playerCount).fill(false),
-        alive: new Array(playerCount).fill(true),
-        turn: 0,
+        mode: msg.mode,
+        seatsA,
+        seatsB,
+        aiSide,
+        seats: { A: new Array(seatsA).fill(null), B: new Array(seatsB).fill(null) },
+        ships: { A: null, B: null },
+        hits: { A: new Set(), B: new Set() },
+        ready: { A: aiSide === 'A', B: aiSide === 'B' },
+        turn: 'A',
         started: false,
-        joinedCount: 0,
       };
-      room.players[0] = ws;
-      room.joinedCount = 1;
-      rooms.set(code, room);
+      if (aiSide) room.ships[aiSide] = randomAIShips();
+      room.seats.A[0] = ws;
       ws.roomCode = code;
-      ws.playerIdx = 0;
-      send(ws, { type: 'created', code, playerIdx: 0, playerCount, joinedCount: 1 });
+      ws.side = 'A';
+      ws.seatIndex = 0;
+      rooms.set(code, room);
+      const { filledA, filledB } = seatCounts(room);
+      send(ws, { type: 'created', code, mode: room.mode, side: 'A', seatIndex: 0, isLeader: true, seatsA, seatsB, filledA, filledB });
       return;
     }
 
@@ -129,49 +190,52 @@ wss.on('connection', (ws) => {
         send(ws, { type: 'error', message: 'Nieprawidlowy kod pokoju.' });
         return;
       }
-      const freeIdx = room.players.findIndex(p => p === null);
-      if (freeIdx === -1) {
+      let side = null;
+      let seatIndex = -1;
+      if (room.seats.A.includes(null)) {
+        side = 'A';
+        seatIndex = room.seats.A.indexOf(null);
+      } else if (room.seats.B.includes(null)) {
+        side = 'B';
+        seatIndex = room.seats.B.indexOf(null);
+      }
+      if (side === null) {
         send(ws, { type: 'error', message: 'Pokoj jest pelny.' });
         return;
       }
-      room.players[freeIdx] = ws;
-      room.joinedCount += 1;
+      room.seats[side][seatIndex] = ws;
       ws.roomCode = msg.code;
-      ws.playerIdx = freeIdx;
-      send(ws, { type: 'joined', code: msg.code, playerIdx: freeIdx, playerCount: room.playerCount, joinedCount: room.joinedCount });
-      broadcast(room, { type: 'player_joined', joinedCount: room.joinedCount, playerCount: room.playerCount }, freeIdx);
+      ws.side = side;
+      ws.seatIndex = seatIndex;
+      const { filledA, filledB } = seatCounts(room);
+      send(ws, { type: 'joined', code: msg.code, mode: room.mode, side, seatIndex, isLeader: seatIndex === 0, seatsA: room.seatsA, seatsB: room.seatsB, filledA, filledB });
+      broadcastRoom(room, { type: 'seat_update', filledA, filledB, seatsA: room.seatsA, seatsB: room.seatsB });
       return;
     }
 
     const room = rooms.get(ws.roomCode);
     if (!room) return;
-    const idx = ws.playerIdx;
+    const mySide = ws.side;
 
     if (msg.type === 'place_ships') {
-      if (room.joinedCount < room.playerCount) return;
-      if (!validateShips(msg.ships, room.boardSize)) {
+      if (room.ready[mySide]) return;
+      if (!validateShips(msg.ships)) {
         send(ws, { type: 'error', message: 'Nieprawidlowe ustawienie statkow.' });
         return;
       }
-      room.ships[idx] = msg.ships;
-      room.ready[idx] = true;
-      broadcast(room, { type: 'opponent_ready', playerIdx: idx }, idx);
-
-      if (room.ready.every(Boolean) && !room.started) {
-        room.started = true;
-        room.players.forEach((playerWs, i) => {
-          send(playerWs, { type: 'start', yourIdx: i, playerCount: room.playerCount, turn: room.turn });
-        });
-      }
+      room.ships[mySide] = msg.ships;
+      room.ready[mySide] = true;
+      broadcastRoom(room, { type: 'side_ready', side: mySide });
+      maybeStartGame(room);
       return;
     }
 
     if (msg.type === 'fire') {
       if (!room.started) return;
-      if (room.turn !== idx) return;
-      const { x, y, target } = msg;
-      if (typeof target !== 'number' || target === idx || !room.alive[target]) return;
-      if (x < 0 || x >= room.boardSize || y < 0 || y >= room.boardSize) return;
+      if (room.turn !== mySide) return;
+      const target = otherSide(mySide);
+      const { x, y } = msg;
+      if (x < 0 || x >= BOARD_SIZE || y < 0 || y >= BOARD_SIZE) return;
 
       const key = `${x},${y}`;
       if (room.hits[target].has(key)) return;
@@ -185,31 +249,21 @@ wss.on('connection', (ws) => {
         sunk = hitShip.cells.every(([sx, sy]) => room.hits[target].has(`${sx},${sy}`));
       }
 
-      const targetAllSunk = checkAllSunk(targetShips, room.hits[target]);
-      if (targetAllSunk) room.alive[target] = false;
-
-      const aliveCount = room.alive.filter(Boolean).length;
-      const gameOver = aliveCount <= 1;
-      const winner = gameOver ? room.alive.findIndex(Boolean) : null;
-
-      if (!gameOver) {
-        room.turn = nextAlivePlayer(room, idx);
-      }
+      const allSunk = checkAllSunk(targetShips, room.hits[target]);
+      if (!allSunk) room.turn = target;
 
       const resultMsg = {
         type: 'fire_result',
-        shooter: idx,
-        target,
+        shooterSide: mySide,
         x, y,
         hit: isHit,
         sunk,
         sunkCells: sunk ? hitShip.cells : null,
-        targetEliminated: targetAllSunk,
-        gameOver,
-        winner,
+        gameOver: allSunk,
+        winnerSide: allSunk ? mySide : null,
         nextTurn: room.turn,
       };
-      broadcast(room, resultMsg, null);
+      broadcastRoom(room, resultMsg);
       return;
     }
   });
@@ -217,7 +271,8 @@ wss.on('connection', (ws) => {
   ws.on('close', () => {
     const room = rooms.get(ws.roomCode);
     if (!room) return;
-    broadcast(room, { type: 'opponent_left' }, ws.playerIdx);
+    if (ws.side && ws.seatIndex !== null) room.seats[ws.side][ws.seatIndex] = null;
+    broadcastRoom(room, { type: 'opponent_left' });
     rooms.delete(ws.roomCode);
   });
 });

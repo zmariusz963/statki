@@ -12,43 +12,30 @@
 
 <div id="screen-lobby" class="screen">
   <h1>Statki</h1>
-  <button id="btn-create">Stworz pokoj (online)</button>
+  <button id="btn-create">Zagraj online (2 urzadzenia)</button>
   <div class="divider">albo</div>
   <input id="input-code" placeholder="Kod pokoju" maxlength="4" autocapitalize="characters" />
   <button id="btn-join">Dolacz do pokoju</button>
   <div class="divider">albo</div>
-  <button id="btn-local">Graj na jednym telefonie</button>
-  <div class="divider">albo</div>
-  <button id="btn-multi">Gra dla 3-4 graczy + komputer</button>
+  <button id="btn-mode-1v1">Gracz vs Gracz (jeden telefon)</button>
+  <button id="btn-mode-1vai">Gracz vs Komputer</button>
+  <button id="btn-mode-2v2">2 Gracze vs 2 Gracze (jeden telefon)</button>
+  <button id="btn-mode-2vai">2 Gracze vs 2 Komputer</button>
   <p id="lobby-message" class="message"></p>
 </div>
 
-<div id="screen-online-setup" class="screen hidden">
-  <h1>Ile graczy online?</h1>
+<div id="screen-online-mode" class="screen hidden">
+  <h1>Jaki tryb online?</h1>
   <p class="hint">Kazdy gracz dolacza na swoim urzadzeniu przez kod pokoju.</p>
-  <div id="online-count-buttons" class="place-controls"></div>
-</div>
-
-<div id="screen-multi-setup" class="screen hidden">
-  <h1>Ustawienia gry</h1>
-  <p class="hint">Ile graczy razem?</p>
-  <div id="multi-total-buttons" class="place-controls"></div>
-  <p class="hint">Ile z nich to komputer?</p>
-  <div id="multi-computer-buttons" class="place-controls"></div>
-  <button id="btn-multi-start">Zaczynamy</button>
-</div>
-
-<div id="screen-target" class="screen hidden">
-  <h1 id="target-title"></h1>
-  <p class="hint">Wybierz w kogo strzelasz</p>
-  <div id="target-buttons" class="place-controls" style="flex-direction: column;"></div>
+  <button id="btn-online-1v1">Gracz vs Gracz</button>
+  <button id="btn-online-2v2">2 Gracze vs 2 Gracze</button>
 </div>
 
 <div id="screen-waiting" class="screen hidden">
   <h1>Pokoj utworzony</h1>
-  <p>Podaj ten kod drugiemu graczowi:</p>
+  <p>Podaj ten kod pozostalym graczom:</p>
   <div id="room-code" class="room-code"></div>
-  <p id="waiting-hint" class="hint">Czekam na dolaczenie gracza...</p>
+  <p id="waiting-hint" class="hint">Czekam na dolaczenie graczy...</p>
 </div>
 
 <div id="screen-pass" class="screen hidden">
@@ -73,7 +60,6 @@
 
 <div id="screen-game" class="screen hidden">
   <p id="turn-indicator" class="turn-indicator"></p>
-  <div id="online-target-switcher" class="place-controls hidden" style="flex-wrap: wrap;"></div>
   <div class="boards-wrap">
     <div class="board-col">
       <h3 id="enemy-board-title">Przeciwnik</h3>
