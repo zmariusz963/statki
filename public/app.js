@@ -493,6 +493,12 @@ function refreshPlacementUI() {
   document.getElementById('btn-rotate').classList.toggle('hidden', !pending || !!freeform || hasVariants);
   document.getElementById('btn-mirror').classList.add('hidden');
   document.getElementById('btn-undo').classList.toggle('hidden', placementOrder.length === 0 && manualCells.length === 0);
+
+  if (pending && !freeform) {
+    const px = lastHoverX !== null ? lastHoverX : 0;
+    const py = lastHoverY !== null ? lastHoverY : 0;
+    previewShip(px, py);
+  }
 }
 
 function renderShapePicker() {
