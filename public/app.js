@@ -111,6 +111,12 @@ function shipVariantCount(def) {
   return 1 + (def.altShapes ? def.altShapes.length : 0);
 }
 
+function shipCellSet(ships) {
+  const set = new Set();
+  ships.forEach(ship => ship.cells.forEach(([x, y]) => set.add(`${x},${y}`)));
+  return set;
+}
+
 function fleetSizeCounts() {
   const counts = {};
   SHIP_DEFS.forEach(def => {
@@ -946,9 +952,13 @@ function renderOnlineSideBoards() {
   renderSunkTally('sunk-tally', onlineSunkShips[target]);
 
   const myHits = onlineHits[mySide];
+  const ownShipCells = shipCellSet(onlineOwnShips || []);
   const ownGrid = buildBoard('own-board', {
     small: true,
-    getCellClass: (x, y) => [myHits[`${x},${y}`] || null],
+    getCellClass: (x, y) => [
+      myHits[`${x},${y}`] || null,
+      ownShipCells.has(`${x},${y}`) ? 'own-ship' : null,
+    ],
     getCellContent: (x, y) => symbolForState(myHits[`${x},${y}`]),
   });
   renderShipOverlays(ownGrid, onlineOwnShips || [], (ship) => ship.cells.every(([x, y]) => myHits[`${x},${y}`] === 'sunk'));
@@ -1147,9 +1157,13 @@ function renderSideBoards(shooter, interactive) {
   renderShipOverlays(enemyGrid, sunkTargetShips, () => true);
   renderSunkTally('sunk-tally', sunkTargetShips);
 
+  const ownShipCells = shipCellSet(side.ships[shooter]);
   const ownGrid = buildBoard('own-board', {
     small: true,
-    getCellClass: (x, y) => [side.hits[shooter].has(`${x},${y}`) ? cellStateSide(shooter, x, y) : null],
+    getCellClass: (x, y) => [
+      side.hits[shooter].has(`${x},${y}`) ? cellStateSide(shooter, x, y) : null,
+      ownShipCells.has(`${x},${y}`) ? 'own-ship' : null,
+    ],
     getCellContent: (x, y) => side.hits[shooter].has(`${x},${y}`) ? symbolForState(cellStateSide(shooter, x, y)) : '',
   });
   renderShipOverlays(ownGrid, side.ships[shooter], (ship) => shipFullySunkSide(shooter, ship));

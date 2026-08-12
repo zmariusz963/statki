@@ -350,6 +350,11 @@ input:focus {
   transition: background 0.1s ease;
 }
 
+.cell.own-ship {
+  background: rgba(83, 101, 117, 0.4);
+  box-shadow: inset 0 0 0 1px rgba(107, 179, 216, 0.25);
+}
+
 .cell.hit {
   background: linear-gradient(180deg, #e2683a, #c14a24);
 }
