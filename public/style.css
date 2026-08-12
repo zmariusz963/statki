@@ -416,25 +416,38 @@ input:focus {
   font-weight: 600;
 }
 
-.sunk-tally {
+.own-board-row {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 6px;
+  align-items: flex-start;
+  gap: 12px;
   width: 100%;
   max-width: 340px;
 }
 
-.sunk-tally-item {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 4px 8px;
-  border-radius: 8px;
+.own-board-row #own-board {
+  flex: 0 0 auto;
+}
+
+.sunk-tally-table {
+  flex: 1;
+  min-width: 0;
+  border-collapse: collapse;
   background: linear-gradient(180deg, #16212b, #101923);
+  border-radius: 10px;
   border: 1px solid #263543;
+  overflow: hidden;
+}
+
+.sunk-tally-table td {
+  padding: 5px 8px;
   font-size: 11px;
   color: #93a3b0;
+  border-bottom: 1px solid #263543;
+  white-space: nowrap;
+}
+
+.sunk-tally-table tr:last-child td {
+  border-bottom: none;
 }
 
 .sunk-tally-size {
@@ -445,14 +458,14 @@ input:focus {
   font-weight: 700;
   color: #cddce6;
   font-variant-numeric: tabular-nums;
+  text-align: right;
 }
 
-.sunk-tally-item.all-sunk {
-  border-color: #993c1d;
-  background: linear-gradient(180deg, #2a1712, #1c0f0b);
+.sunk-tally-table tr.all-sunk td {
+  color: #e2683a;
 }
 
-.sunk-tally-item.all-sunk .sunk-tally-count {
+.sunk-tally-table tr.all-sunk .sunk-tally-count {
   color: #e2683a;
 }
 
@@ -798,5 +811,9 @@ input:focus {
 
   .ships-legend {
     max-width: 460px;
+  }
+
+  .own-board-row {
+    max-width: 480px;
   }
 }

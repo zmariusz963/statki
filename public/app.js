@@ -134,10 +134,10 @@ function renderSunkTally(containerId, sunkShipsList) {
   sizes.forEach(size => {
     const sunk = sunkCounts[size] || 0;
     const total = totalCounts[size];
-    const item = document.createElement('div');
-    item.className = 'sunk-tally-item' + (sunk === total ? ' all-sunk' : '');
-    item.innerHTML = `<span class="sunk-tally-size">${size}-masztowe</span><span class="sunk-tally-count">${sunk}/${total}</span>`;
-    el.appendChild(item);
+    const row = document.createElement('tr');
+    if (sunk === total) row.classList.add('all-sunk');
+    row.innerHTML = `<td class="sunk-tally-size">${size}-masztowe</td><td class="sunk-tally-count">${sunk}/${total}</td>`;
+    el.appendChild(row);
   });
 }
 
