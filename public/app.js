@@ -18,9 +18,9 @@ document.addEventListener('fullscreenchange', () => {
 });
 
 const SHIP_DEFS = [
-  { name: 'Czteromasztowiec', shape: [[0, 0], [1, 0], [2, 0], [3, 0]] },
-  { name: 'Trojmasztowiec 1', shape: [[0, 0], [1, 0], [2, 0]] },
-  { name: 'Trojmasztowiec 2', shape: [[0, 0], [1, 0], [2, 0]] },
+  { name: 'Czteromasztowiec', shape: [[0, 0], [1, 0], [2, 0], [3, 0]], altShapes: [[[0, 0], [1, 0], [2, 0], [2, 1]]] },
+  { name: 'Trojmasztowiec 1', shape: [[0, 0], [1, 0], [2, 0]], altShapes: [[[0, 0], [1, 0], [1, 1]]] },
+  { name: 'Trojmasztowiec 2', shape: [[0, 0], [1, 0], [2, 0]], altShapes: [[[0, 0], [1, 0], [1, 1]]] },
   { name: 'Dwumasztowiec 1', shape: [[0, 0], [1, 0]] },
   { name: 'Dwumasztowiec 2', shape: [[0, 0], [1, 0]] },
   { name: 'Dwumasztowiec 3', shape: [[0, 0], [1, 0]] },
@@ -100,6 +100,45 @@ function surroundingCells(shipCells) {
     }
   });
   return result;
+}
+
+function shipShapeVariant(def, variant) {
+  if (variant === 0 || !def.altShapes) return def.shape;
+  return def.altShapes[variant - 1];
+}
+
+function shipVariantCount(def) {
+  return 1 + (def.altShapes ? def.altShapes.length : 0);
+}
+
+function fleetSizeCounts() {
+  const counts = {};
+  SHIP_DEFS.forEach(def => {
+    const size = def.shape.length;
+    counts[size] = (counts[size] || 0) + 1;
+  });
+  return counts;
+}
+
+function renderSunkTally(containerId, sunkShipsList) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  const totalCounts = fleetSizeCounts();
+  const sunkCounts = {};
+  sunkShipsList.forEach(ship => {
+    const size = ship.cells.length;
+    sunkCounts[size] = (sunkCounts[size] || 0) + 1;
+  });
+  const sizes = Object.keys(totalCounts).map(Number).sort((a, b) => b - a);
+  el.innerHTML = '';
+  sizes.forEach(size => {
+    const sunk = sunkCounts[size] || 0;
+    const total = totalCounts[size];
+    const item = document.createElement('div');
+    item.className = 'sunk-tally-item' + (sunk === total ? ' all-sunk' : '');
+    item.innerHTML = `<span class="sunk-tally-size">${size}-masztowe</span><span class="sunk-tally-count">${sunk}/${total}</span>`;
+    el.appendChild(item);
+  });
 }
 
 function shapeBoundingBox(shape) {
@@ -305,6 +344,24 @@ function renderLegendMini(shape, extraClass) {
   return wrap;
 }
 
+function shapeOrientations(def) {
+  const variants = [def.shape, ...(def.altShapes || [])];
+  const seen = new Set();
+  const result = [];
+  variants.forEach((shape, variantIdx) => {
+    for (let rotation = 0; rotation < 4; rotation++) {
+      [false, true].forEach((mirrored) => {
+        const cells = shapeCells(0, 0, shape, rotation, mirrored);
+        const key = cells.map(c => c.join(',')).sort().join('|');
+        if (seen.has(key)) return;
+        seen.add(key);
+        result.push({ variant: variantIdx, rotation, mirrored, cells });
+      });
+    }
+  });
+  return result;
+}
+
 // ---------- Generic board builder ----------
 
 function buildBoard(containerId, opts) {
@@ -373,6 +430,7 @@ function triggerCellAnimation(containerId, x, y, hit) {
 let placeShipIdx = 0;
 let currentRotation = 0;
 let currentMirrored = false;
+let currentVariant = 0;
 let lastHoverX = null;
 let lastHoverY = null;
 let selectedIdx = 0;
@@ -407,6 +465,7 @@ function startPlacementUI(onReady) {
   showScreen('place');
   currentRotation = 0;
   currentMirrored = false;
+  currentVariant = 0;
   lastHoverX = null;
   lastHoverY = null;
   selectedIdx = 0;
@@ -422,15 +481,70 @@ function startPlacementUI(onReady) {
 function refreshPlacementUI() {
   renderPlaceHint();
   renderShipsLegend();
+  renderShapePicker();
   buildPlaceBoardUI();
 
   const allPlaced = placedByIndex.every(Boolean);
   const pending = !placedByIndex[selectedIdx];
-  const freeform = SHIP_DEFS[selectedIdx].freeform;
+  const def = SHIP_DEFS[selectedIdx];
+  const freeform = def.freeform;
+  const hasVariants = shipVariantCount(def) > 1;
   document.getElementById('btn-ready').classList.toggle('hidden', !allPlaced);
-  document.getElementById('btn-rotate').classList.toggle('hidden', !pending || !!freeform);
+  document.getElementById('btn-rotate').classList.toggle('hidden', !pending || !!freeform || hasVariants);
   document.getElementById('btn-mirror').classList.add('hidden');
   document.getElementById('btn-undo').classList.toggle('hidden', placementOrder.length === 0 && manualCells.length === 0);
+}
+
+function renderShapePicker() {
+  const picker = document.getElementById('shape-picker');
+  const def = SHIP_DEFS[selectedIdx];
+  if (!def || def.freeform || shipVariantCount(def) <= 1) {
+    picker.classList.add('hidden');
+    picker.innerHTML = '';
+    return;
+  }
+  picker.classList.remove('hidden');
+  picker.innerHTML = '';
+  const placed = placedByIndex[selectedIdx];
+  shapeOrientations(def).forEach((orient) => {
+    const item = document.createElement('div');
+    item.className = 'shape-thumb-item';
+    const active = placed
+      ? (placed.variant === orient.variant && placed.rotation === orient.rotation && placed.mirrored === orient.mirrored)
+      : (currentVariant === orient.variant && currentRotation === orient.rotation && currentMirrored === orient.mirrored);
+    if (active) item.classList.add('current');
+    item.appendChild(renderLegendMini(orient.cells));
+    item.onclick = () => chooseShapeOrientation(orient);
+    picker.appendChild(item);
+  });
+}
+
+function chooseShapeOrientation(orient) {
+  const idx = selectedIdx;
+  const def = SHIP_DEFS[idx];
+  if (placedByIndex[idx]) {
+    const placed = placedByIndex[idx];
+    const oldCells = placed.cells;
+    const anchorX = Math.min(...oldCells.map(c => c[0]));
+    const anchorY = Math.min(...oldCells.map(c => c[1]));
+    oldCells.forEach(([x, y]) => placedSet.delete(`${x},${y}`));
+    const newCells = shapeCells(anchorX, anchorY, shipShapeVariant(def, orient.variant), orient.rotation, orient.mirrored);
+    const valid = cellsInBounds(newCells) && newCells.every(([x, y]) => !hasConflict(x, y));
+    if (valid) {
+      newCells.forEach(([x, y]) => placedSet.add(`${x},${y}`));
+      placedByIndex[idx] = { cells: newCells, rotation: orient.rotation, mirrored: orient.mirrored, variant: orient.variant };
+      document.getElementById('place-message').textContent = '';
+    } else {
+      oldCells.forEach(([x, y]) => placedSet.add(`${x},${y}`));
+      document.getElementById('place-message').textContent = 'Brak miejsca na ten uklad w tym miejscu - przesun statek i sprobuj ponownie.';
+    }
+  } else {
+    currentVariant = orient.variant;
+    currentRotation = orient.rotation;
+    currentMirrored = orient.mirrored;
+    if (lastHoverX !== null) previewShip(lastHoverX, lastHoverY);
+  }
+  refreshPlacementUI();
 }
 
 function renderPlaceHint() {
@@ -438,9 +552,13 @@ function renderPlaceHint() {
   if (!placedByIndex[selectedIdx]) {
     if (def.freeform) {
       document.getElementById('place-hint').textContent = `Ustaw: ${def.name} - wybierz pole ${manualCells.length + 1}/${def.shape.length} (sasiadujace), kliknij ostatnie by cofnac`;
+    } else if (shipVariantCount(def) > 1) {
+      document.getElementById('place-hint').textContent = `Ustaw: ${def.name} - wybierz uklad ponizej, potem kliknij pole na planszy.`;
     } else {
       document.getElementById('place-hint').textContent = `Ustaw: ${def.name}`;
     }
+  } else if (shipVariantCount(def) > 1) {
+    document.getElementById('place-hint').textContent = `${def.name} postawiony. Wybierz inny uklad ponizej lub kliknij inny statek na liscie.`;
   } else {
     document.getElementById('place-hint').textContent = 'Wszystkie statki rozstawione. Kliknij statek na liscie, aby go przestawic.';
   }
@@ -470,6 +588,7 @@ function selectShip(i) {
   selectedIdx = i;
   currentRotation = 0;
   currentMirrored = false;
+  currentVariant = 0;
   manualCells = [];
   document.getElementById('place-message').textContent = '';
   refreshPlacementUI();
@@ -494,7 +613,7 @@ function previewShip(x, y) {
     return;
   }
 
-  const cells = shapeCells(x, y, SHIP_DEFS[selectedIdx].shape, currentRotation, currentMirrored);
+  const cells = shapeCells(x, y, shipShapeVariant(SHIP_DEFS[selectedIdx], currentVariant), currentRotation, currentMirrored);
   const valid = cellsInBounds(cells) && cells.every(([cx, cy]) => !hasConflict(cx, cy));
   cells.forEach(([cx, cy]) => {
     if (cx < 0 || cx >= BOARD_SIZE || cy < 0 || cy >= BOARD_SIZE) return;
@@ -555,7 +674,7 @@ function handleManualCellClick(x, y) {
 
 function tryPlaceShip(x, y) {
   if (placedByIndex[selectedIdx]) return;
-  const cells = shapeCells(x, y, SHIP_DEFS[selectedIdx].shape, currentRotation, currentMirrored);
+  const cells = shapeCells(x, y, shipShapeVariant(SHIP_DEFS[selectedIdx], currentVariant), currentRotation, currentMirrored);
 
   if (!cellsInBounds(cells)) {
     document.getElementById('place-message').textContent = 'Statek nie miesci sie na planszy.';
@@ -567,14 +686,17 @@ function tryPlaceShip(x, y) {
   }
 
   cells.forEach(([cx, cy]) => placedSet.add(`${cx},${cy}`));
-  placedByIndex[selectedIdx] = { cells };
+  placedByIndex[selectedIdx] = { cells, rotation: currentRotation, mirrored: currentMirrored, variant: currentVariant };
   placementOrder.push(selectedIdx);
   document.getElementById('place-message').textContent = '';
 
-  const next = firstUnplacedIndex();
-  if (next !== -1) selectedIdx = next;
-  currentRotation = 0;
-  currentMirrored = false;
+  if (shipVariantCount(SHIP_DEFS[selectedIdx]) <= 1) {
+    const next = firstUnplacedIndex();
+    if (next !== -1) selectedIdx = next;
+    currentRotation = 0;
+    currentMirrored = false;
+    currentVariant = 0;
+  }
   refreshPlacementUI();
 }
 
@@ -602,6 +724,7 @@ document.getElementById('btn-undo').onclick = () => {
   selectedIdx = idx;
   currentRotation = 0;
   currentMirrored = false;
+  currentVariant = 0;
   document.getElementById('place-message').textContent = '';
   refreshPlacementUI();
 };
@@ -645,9 +768,10 @@ function randomAIFleet() {
       attempts++;
       const rotation = Math.floor(Math.random() * 4);
       const mirrored = Math.random() < 0.5;
+      const variant = Math.floor(Math.random() * shipVariantCount(def));
       const x = Math.floor(Math.random() * BOARD_SIZE);
       const y = Math.floor(Math.random() * BOARD_SIZE);
-      const cells = shapeCells(x, y, def.shape, rotation, mirrored);
+      const cells = shapeCells(x, y, shipShapeVariant(def, variant), rotation, mirrored);
       if (!cellsInBounds(cells)) continue;
       if (cells.some(([cx, cy]) => cellConflictsWithSet(occupied, cx, cy))) continue;
       cells.forEach(([cx, cy]) => occupied.add(`${cx},${cy}`));
@@ -813,6 +937,7 @@ function renderOnlineSideBoards() {
     onClick: fireOnlineSide,
   });
   renderShipOverlays(enemyGrid, onlineSunkShips[target], () => true);
+  renderSunkTally('sunk-tally', onlineSunkShips[target]);
 
   const myHits = onlineHits[mySide];
   const ownGrid = buildBoard('own-board', {
@@ -1014,6 +1139,7 @@ function renderSideBoards(shooter, interactive) {
   });
   const sunkTargetShips = side.ships[target].filter(ship => shipFullySunkSide(target, ship));
   renderShipOverlays(enemyGrid, sunkTargetShips, () => true);
+  renderSunkTally('sunk-tally', sunkTargetShips);
 
   const ownGrid = buildBoard('own-board', {
     small: true,
@@ -1046,6 +1172,7 @@ function fireSide(x, y, shooter, target) {
   });
   const sunkTargetShips = side.ships[target].filter(ship => shipFullySunkSide(target, ship));
   renderShipOverlays(enemyGrid, sunkTargetShips, () => true);
+  renderSunkTally('sunk-tally', sunkTargetShips);
   triggerCellAnimation('enemy-board', x, y, isHit);
 
   if (shipJustSunk) {
