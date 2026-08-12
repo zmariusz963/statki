@@ -7,13 +7,8 @@ document.getElementById('btn-mute').onclick = () => {
 
 document.getElementById('btn-fullscreen').onclick = () => {
   if (!document.fullscreenElement) {
-    document.documentElement.requestFullscreen().catch(() => {}).then(() => {
-      if (screen.orientation && screen.orientation.lock) {
-        screen.orientation.lock('landscape').catch(() => {});
-      }
-    });
+    document.documentElement.requestFullscreen().catch(() => {});
   } else {
-    if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock();
     document.exitFullscreen().catch(() => {});
   }
 };

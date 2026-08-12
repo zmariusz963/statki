@@ -800,20 +800,3 @@ input:focus {
     max-width: 460px;
   }
 }
-
-@media screen and (max-width: 900px) and (orientation: portrait) {
-  html {
-    transform: rotate(90deg);
-    transform-origin: left top;
-    width: 100vh;
-    height: 100vw;
-    overflow-x: hidden;
-    position: absolute;
-    top: 0;
-    left: 100%;
-  }
-
-  body {
-    min-height: 100vw;
-  }
-}
