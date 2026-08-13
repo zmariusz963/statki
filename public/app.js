@@ -1,5 +1,11 @@
 const BOARD_SIZE = 10;
 
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  });
+}
+
 document.getElementById('btn-mute').onclick = () => {
   const muted = AudioEngine.toggleMute();
   document.getElementById('btn-mute').innerHTML = muted ? '&#128263;' : '&#128266;';
