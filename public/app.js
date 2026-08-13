@@ -768,7 +768,9 @@ function pulseTurnIndicator() {
 
 function showPass(title, message, onContinue) {
   showScreen('pass');
-  document.getElementById('pass-title').textContent = title;
+  const titleEl = document.getElementById('pass-title');
+  titleEl.textContent = title;
+  titleEl.classList.toggle('hidden', !title);
   document.getElementById('pass-message').textContent = message;
   document.getElementById('btn-pass-continue').onclick = onContinue;
 }
@@ -899,6 +901,7 @@ function proceedToOnlinePlacement() {
   } else {
     showScreen('pass');
     document.getElementById('pass-title').textContent = 'Rozstawianie statkow';
+    document.getElementById('pass-title').classList.remove('hidden');
     document.getElementById('pass-message').textContent = 'Twoj partner (pierwszy w pokoju) rozstawia statki. Czekaj...';
     document.getElementById('btn-pass-continue').classList.add('hidden');
   }
@@ -1065,7 +1068,7 @@ function startSideMode(labelA, labelB, bIsAI) {
   side.turn = 'A';
   aiTargetQueue = [];
 
-  showPass(labelA, `${labelA}, rozstawcie swoje statki. Kliknij Dalej gdy jestescie gotowi.`, () => {
+  showPass('', `${labelA}, rozstawcie swoje statki. Kliknij Dalej gdy jestescie gotowi.`, () => {
     startPlacementUI((ships) => onSidePlacementReady('A', ships));
   });
 }
@@ -1079,7 +1082,7 @@ function onSidePlacementReady(who, ships) {
         startSideTurn();
       });
     } else {
-      showPass(side.labelB, `${side.labelB}, rozstawcie swoje statki. Kliknij Dalej gdy jestescie gotowi.`, () => {
+      showPass('', `${side.labelB}, rozstawcie swoje statki. Kliknij Dalej gdy jestescie gotowi.`, () => {
         startPlacementUI((shipsB) => onSidePlacementReady('B', shipsB));
       });
     }
@@ -1131,6 +1134,7 @@ function startSideTurn() {
 function announceAISideTurn() {
   showScreen('pass');
   document.getElementById('pass-title').textContent = side.labelB;
+  document.getElementById('pass-title').classList.remove('hidden');
   document.getElementById('pass-message').textContent = `${side.labelB} namierza cel...`;
   document.getElementById('btn-pass-continue').classList.add('hidden');
   setTimeout(() => {
