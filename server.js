@@ -10,6 +10,9 @@ const MIME = {
   '.html': 'text/html',
   '.css': 'text/css',
   '.js': 'application/javascript',
+  '.json': 'application/manifest+json',
+  '.png': 'image/png',
+  '.svg': 'image/svg+xml',
 };
 
 const SHIP_SIZES = [4, 3, 3, 2, 2, 2, 1, 1, 1, 1];
