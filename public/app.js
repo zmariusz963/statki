@@ -1038,6 +1038,8 @@ const side = {
   turn: 'A',
 };
 
+let aiTargetQueue = [];
+
 function startSideMode(labelA, labelB, bIsAI) {
   side.labelA = labelA;
   side.labelB = labelB;
@@ -1045,6 +1047,7 @@ function startSideMode(labelA, labelB, bIsAI) {
   side.ships = { A: null, B: null };
   side.hits = { A: new Set(), B: new Set() };
   side.turn = 'A';
+  aiTargetQueue = [];
 
   showPass(labelA, `${labelA}, rozstawcie swoje statki. Kliknij Dalej gdy jestescie gotowi.`, () => {
     startPlacementUI((ships) => onSidePlacementReady('A', ships));
@@ -1122,13 +1125,26 @@ function announceAISideTurn() {
 
 function runAISideTurn() {
   const target = otherSide('B');
-  const emptyCells = [];
-  for (let y = 0; y < BOARD_SIZE; y++) {
-    for (let x = 0; x < BOARD_SIZE; x++) {
-      if (!side.hits[target].has(`${x},${y}`)) emptyCells.push([x, y]);
+  let x, y;
+
+  while (aiTargetQueue.length > 0) {
+    const [cx, cy] = aiTargetQueue.shift();
+    if (cx >= 0 && cx < BOARD_SIZE && cy >= 0 && cy < BOARD_SIZE && !side.hits[target].has(`${cx},${cy}`)) {
+      x = cx;
+      y = cy;
+      break;
     }
   }
-  const [x, y] = emptyCells[Math.floor(Math.random() * emptyCells.length)];
+
+  if (x === undefined) {
+    const emptyCells = [];
+    for (let yy = 0; yy < BOARD_SIZE; yy++) {
+      for (let xx = 0; xx < BOARD_SIZE; xx++) {
+        if (!side.hits[target].has(`${xx},${yy}`)) emptyCells.push([xx, yy]);
+      }
+    }
+    [x, y] = emptyCells[Math.floor(Math.random() * emptyCells.length)];
+  }
 
   showScreen('game');
   document.getElementById('game-message').textContent = '';
@@ -1137,7 +1153,21 @@ function runAISideTurn() {
   renderSideBoards('B', false);
 
   setTimeout(() => {
+    const hitShip = side.ships[target].find(s => s.cells.some(([sx, sy]) => sx === x && sy === y));
     fireSide(x, y, 'B', target);
+    if (hitShip) {
+      if (shipFullySunkSide(target, hitShip)) {
+        aiTargetQueue = [];
+      } else {
+        const neighbors = [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]]
+          .filter(([nx, ny]) => nx >= 0 && nx < BOARD_SIZE && ny >= 0 && ny < BOARD_SIZE && !side.hits[target].has(`${nx},${ny}`));
+        for (let i = neighbors.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [neighbors[i], neighbors[j]] = [neighbors[j], neighbors[i]];
+        }
+        aiTargetQueue.push(...neighbors);
+      }
+    }
   }, 500);
 }
 
