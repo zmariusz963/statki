@@ -702,13 +702,11 @@ function tryPlaceShip(x, y) {
   placementOrder.push(selectedIdx);
   document.getElementById('place-message').textContent = '';
 
-  if (shipVariantCount(SHIP_DEFS[selectedIdx]) <= 1) {
-    const next = firstUnplacedIndex();
-    if (next !== -1) selectedIdx = next;
-    currentRotation = 0;
-    currentMirrored = false;
-    currentVariant = 0;
-  }
+  const next = firstUnplacedIndex();
+  if (next !== -1) selectedIdx = next;
+  currentRotation = 0;
+  currentMirrored = false;
+  currentVariant = 0;
   refreshPlacementUI();
 }
 
