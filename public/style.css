@@ -58,7 +58,7 @@ body {
 #btn-mute {
   position: fixed;
   top: 10px;
-  right: 10px;
+  left: 52px;
   width: 46px;
   height: 46px;
   max-width: none;
@@ -79,7 +79,7 @@ body {
 #btn-fullscreen {
   position: fixed;
   top: 10px;
-  right: 64px;
+  right: 10px;
   width: 34px;
   height: 34px;
   max-width: none;
