@@ -48,7 +48,17 @@ const screens = {
 function showScreen(name) {
   Object.values(screens).forEach(s => s.classList.add('hidden'));
   screens[name].classList.remove('hidden');
+  document.getElementById('btn-back-menu').classList.toggle('hidden', name === 'lobby');
 }
+
+document.getElementById('btn-back-menu').onclick = () => {
+  if (ws) {
+    try { ws.close(); } catch (e) { /* ignore */ }
+    ws = null;
+  }
+  document.getElementById('lobby-message').textContent = '';
+  showScreen('lobby');
+};
 
 function colLetter(x) {
   return String.fromCharCode(65 + x);
