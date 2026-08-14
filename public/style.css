@@ -809,14 +809,14 @@ input:focus {
   }
 
   #screen-game {
-    max-width: 1100px;
+    max-width: 1400px;
   }
 
   #screen-game .boards-wrap {
     flex-direction: row;
     justify-content: center;
     align-items: flex-start;
-    gap: 56px;
+    gap: 64px;
   }
 
   #screen-game .board-col {
@@ -824,22 +824,45 @@ input:focus {
   }
 
   #screen-game .board-wrapper {
-    max-width: 460px;
+    width: 640px;
+    max-width: 640px;
   }
 
   #screen-game .board-wrapper.small {
-    max-width: 380px;
+    width: 500px;
+    max-width: 500px;
   }
 
   #screen-place .board-wrapper {
-    max-width: 460px;
+    width: 620px;
+    max-width: 620px;
   }
 
   .ships-legend {
-    max-width: 460px;
+    max-width: 620px;
   }
 
   .own-board-row {
-    max-width: 480px;
+    max-width: 660px;
+  }
+}
+
+@media (min-width: 1500px) {
+  #screen-game {
+    max-width: 1700px;
+  }
+
+  #screen-game .board-wrapper {
+    width: 780px;
+    max-width: 780px;
+  }
+
+  #screen-game .board-wrapper.small {
+    width: 600px;
+    max-width: 600px;
+  }
+
+  .own-board-row {
+    max-width: 780px;
   }
 }
