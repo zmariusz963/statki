@@ -60,6 +60,10 @@ function broadcastRoom(room, msg) {
   [...room.seats.A, ...room.seats.B].forEach(ws => send(ws, msg));
 }
 
+function broadcastSide(room, side, msg) {
+  room.seats[side].forEach(ws => send(ws, msg));
+}
+
 function seatsConfigForMode(mode) {
   if (mode === '1v1') return { seatsA: 1, seatsB: 1, aiSide: null };
   if (mode === '1vai') return { seatsA: 1, seatsB: 0, aiSide: 'B' };
@@ -84,6 +88,31 @@ function validateShips(ships) {
     }
   }
   return true;
+}
+
+function validateOneShip(cells, expectedSize, alreadyPlacedCells) {
+  if (!Array.isArray(cells) || cells.length !== expectedSize) return false;
+  const seen = new Set();
+  for (const c of cells) {
+    if (!Array.isArray(c) || c.length !== 2) return false;
+    const [x, y] = c;
+    if (!Number.isInteger(x) || !Number.isInteger(y)) return false;
+    if (x < 0 || x >= BOARD_SIZE || y < 0 || y >= BOARD_SIZE) return false;
+    const key = `${x},${y}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+  }
+  const occupied = new Set();
+  alreadyPlacedCells.forEach(([x, y]) => occupied.add(`${x},${y}`));
+  const conflicts = (x, y) => {
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dy = -1; dy <= 1; dy++) {
+        if (occupied.has(`${x + dx},${y + dy}`)) return true;
+      }
+    }
+    return false;
+  };
+  return cells.every(([x, y]) => !conflicts(x, y));
 }
 
 function randomAIShips() {
@@ -164,7 +193,7 @@ function maybeStartGame(room) {
   if (!room.ready.A || !room.ready.B) return;
   room.started = true;
   room.turn = 'A';
-  broadcastRoom(room, { type: 'start', turn: room.turn });
+  broadcastRoom(room, { type: 'start', turn: room.turn, turnSeat: room.fireSeat[room.turn] });
 }
 
 wss.on('connection', (ws) => {
@@ -190,6 +219,9 @@ wss.on('connection', (ws) => {
         aiSide,
         seats: { A: new Array(seatsA).fill(null), B: new Array(seatsB).fill(null) },
         ships: { A: null, B: null },
+        shipsPartial: { A: [], B: [] },
+        placeTurn: { A: 0, B: 0 },
+        fireSeat: { A: 0, B: 0 },
         hits: { A: new Set(), B: new Set() },
         ready: { A: aiSide === 'A', B: aiSide === 'B' },
         turn: 'A',
@@ -239,23 +271,49 @@ wss.on('connection', (ws) => {
     if (!room) return;
     const mySide = ws.side;
 
-    if (msg.type === 'place_ships') {
+    if (msg.type === 'place_ship') {
       if (room.ready[mySide]) return;
-      if (!validateShips(msg.ships)) {
-        send(ws, { type: 'error', message: 'Nieprawidlowe ustawienie statkow.' });
+      const seatsForSide = mySide === 'A' ? room.seatsA : room.seatsB;
+      if (seatsForSide === 2 && ws.seatIndex !== room.placeTurn[mySide]) {
+        send(ws, { type: 'error', message: 'Nie twoja kolej na stawianie statku.' });
         return;
       }
-      room.ships[mySide] = msg.ships;
-      room.ready[mySide] = true;
-      room.seats[mySide].forEach(seatWs => send(seatWs, { type: 'side_ships', ships: msg.ships }));
-      broadcastRoom(room, { type: 'side_ready', side: mySide });
-      maybeStartGame(room);
+      const partial = room.shipsPartial[mySide];
+      const nextIndex = partial.length;
+      if (nextIndex >= SHIP_SIZES.length) return;
+      const alreadyPlacedCells = partial.flatMap(s => s.cells);
+      if (!validateOneShip(msg.cells, SHIP_SIZES[nextIndex], alreadyPlacedCells)) {
+        send(ws, { type: 'error', message: 'Nieprawidlowe ustawienie statku.' });
+        return;
+      }
+
+      partial.push({ cells: msg.cells });
+      if (seatsForSide === 2) room.placeTurn[mySide] = 1 - room.placeTurn[mySide];
+
+      if (partial.length === SHIP_SIZES.length) {
+        room.ships[mySide] = partial;
+        room.ready[mySide] = true;
+        broadcastSide(room, mySide, { type: 'side_ships', ships: partial });
+        broadcastRoom(room, { type: 'side_ready', side: mySide });
+        maybeStartGame(room);
+      } else {
+        broadcastSide(room, mySide, {
+          type: 'ship_placed',
+          side: mySide,
+          cells: msg.cells,
+          shipsPlaced: partial.length,
+          totalShips: SHIP_SIZES.length,
+          activeSeatIndex: room.placeTurn[mySide],
+        });
+      }
       return;
     }
 
     if (msg.type === 'fire') {
       if (!room.started) return;
       if (room.turn !== mySide) return;
+      const seatsForMySide = mySide === 'A' ? room.seatsA : room.seatsB;
+      if (seatsForMySide === 2 && ws.seatIndex !== room.fireSeat[mySide]) return;
       const target = otherSide(mySide);
       const { x, y } = msg;
       if (x < 0 || x >= BOARD_SIZE || y < 0 || y >= BOARD_SIZE) return;
@@ -273,6 +331,7 @@ wss.on('connection', (ws) => {
       }
 
       const allSunk = checkAllSunk(targetShips, room.hits[target]);
+      if (seatsForMySide === 2) room.fireSeat[mySide] = 1 - room.fireSeat[mySide];
       if (!allSunk) room.turn = target;
 
       let autoMissCells = [];
@@ -297,6 +356,7 @@ wss.on('connection', (ws) => {
         gameOver: allSunk,
         winnerSide: allSunk ? mySide : null,
         nextTurn: room.turn,
+        nextTurnSeat: room.fireSeat[room.turn],
       };
       broadcastRoom(room, resultMsg);
       return;

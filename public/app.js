@@ -461,6 +461,7 @@ let placementOrder = [];
 let placedSet = new Set();
 let onPlacementReady = null;
 let manualCells = [];
+let placementSingleShipMode = false;
 
 function hasConflict(x, y) {
   for (let dx = -1; dx <= 1; dx++) {
@@ -483,20 +484,31 @@ function firstUnplacedIndex() {
   return placedByIndex.findIndex(s => !s);
 }
 
-function startPlacementUI(onReady) {
+function startPlacementUI(onReady, opts) {
+  opts = opts || {};
   showScreen('place');
   currentRotation = 0;
   currentMirrored = false;
   currentVariant = 0;
   lastHoverX = null;
   lastHoverY = null;
-  selectedIdx = 0;
   placedByIndex = new Array(SHIP_DEFS.length).fill(null);
   placementOrder = [];
   placedSet = new Set();
   manualCells = [];
+  placementSingleShipMode = !!opts.singleShip;
   onPlacementReady = onReady;
   document.getElementById('place-message').textContent = '';
+
+  if (opts.preplaced) {
+    opts.preplaced.forEach((ship, i) => {
+      placedByIndex[i] = ship;
+      placementOrder.push(i);
+      ship.cells.forEach(([x, y]) => placedSet.add(`${x},${y}`));
+    });
+  }
+  const next = firstUnplacedIndex();
+  selectedIdx = next === -1 ? 0 : next;
   refreshPlacementUI();
 }
 
@@ -714,9 +726,15 @@ function tryPlaceShip(x, y) {
   }
 
   cells.forEach(([cx, cy]) => placedSet.add(`${cx},${cy}`));
-  placedByIndex[selectedIdx] = { cells, rotation: currentRotation, mirrored: currentMirrored, variant: currentVariant };
+  const placedShip = { cells, rotation: currentRotation, mirrored: currentMirrored, variant: currentVariant };
+  placedByIndex[selectedIdx] = placedShip;
   placementOrder.push(selectedIdx);
   document.getElementById('place-message').textContent = '';
+
+  if (placementSingleShipMode) {
+    if (onPlacementReady) onPlacementReady([placedShip]);
+    return;
+  }
 
   const next = firstUnplacedIndex();
   if (next !== -1) selectedIdx = next;
@@ -817,10 +835,18 @@ let mySide = null;
 let mySeatIndex = null;
 let isLeader = false;
 let onlineTurn = 'A';
+let onlineTurnSeat = 0;
 let myOnlineTurn = false;
 let onlineOwnShips = null;
+let onlineSeatsA = 1;
+let onlineSeatsB = 1;
+let onlineTeamShips = [];
 const onlineHits = { A: {}, B: {} };
 const onlineSunkShips = { A: [], B: [] };
+
+function onlineSeatsForSide(s) {
+  return s === 'A' ? onlineSeatsA : onlineSeatsB;
+}
 
 function otherSideClient(s) {
   return s === 'A' ? 'B' : 'A';
@@ -841,6 +867,8 @@ function handleMessage(msg) {
       mySide = 'A';
       mySeatIndex = 0;
       isLeader = true;
+      onlineSeatsA = msg.seatsA;
+      onlineSeatsB = msg.seatsB;
       document.getElementById('room-code').textContent = msg.code;
       updateOnlineWaitingHint(msg);
       showScreen('waiting');
@@ -849,6 +877,8 @@ function handleMessage(msg) {
       mySide = msg.side;
       mySeatIndex = msg.seatIndex;
       isLeader = msg.isLeader;
+      onlineSeatsA = msg.seatsA;
+      onlineSeatsB = msg.seatsB;
       if (msg.filledA === msg.seatsA && msg.filledB === msg.seatsB) {
         proceedToOnlinePlacement();
       } else {
@@ -875,9 +905,13 @@ function handleMessage(msg) {
     case 'side_ships':
       onlineOwnShips = msg.ships;
       break;
+    case 'ship_placed':
+      if (msg.side === mySide) handleTeamShipPlaced(msg);
+      break;
     case 'start':
       onlineTurn = msg.turn;
-      myOnlineTurn = onlineTurn === mySide;
+      onlineTurnSeat = msg.turnSeat || 0;
+      myOnlineTurn = onlineTurn === mySide && (onlineSeatsForSide(mySide) < 2 || onlineTurnSeat === mySeatIndex);
       startOnlineSideGame();
       break;
     case 'fire_result':
@@ -896,21 +930,55 @@ function updateOnlineWaitingHint(msg) {
 }
 
 function proceedToOnlinePlacement() {
-  if (isLeader) {
-    startPlacementUI(onOnlineReady);
+  onlineTeamShips = [];
+  if (onlineSeatsForSide(mySide) < 2) {
+    if (isLeader) {
+      startPlacementUI(onOnlineReady);
+    } else {
+      showWaitingForTeam('Rozstawianie statkow', 'Twoj partner (pierwszy w pokoju) rozstawia statki. Czekaj...');
+    }
+  } else if (mySeatIndex === 0) {
+    startOnlineTeamShipTurn();
   } else {
-    showScreen('pass');
-    document.getElementById('pass-title').textContent = 'Rozstawianie statkow';
-    document.getElementById('pass-title').classList.remove('hidden');
-    document.getElementById('pass-message').textContent = 'Twoj partner (pierwszy w pokoju) rozstawia statki. Czekaj...';
-    document.getElementById('btn-pass-continue').classList.add('hidden');
+    showWaitingForTeam('Rozstawianie statkow', 'Twoj partner stawia pierwszy statek. Czekaj na swoja kolej...');
   }
+}
+
+function showWaitingForTeam(title, message) {
+  showScreen('pass');
+  document.getElementById('pass-title').textContent = title;
+  document.getElementById('pass-title').classList.remove('hidden');
+  document.getElementById('pass-message').textContent = message;
+  document.getElementById('btn-pass-continue').classList.add('hidden');
 }
 
 function onOnlineReady(ships) {
   ws.send(JSON.stringify({ type: 'place_ships', ships }));
   document.getElementById('btn-ready').disabled = true;
   document.getElementById('place-message').textContent = 'Czekamy na pozostalych graczy...';
+}
+
+function startOnlineTeamShipTurn() {
+  startPlacementUI(onOnlineSingleShipReady, { singleShip: true, preplaced: onlineTeamShips });
+}
+
+function onOnlineSingleShipReady(ships) {
+  const ship = ships[0];
+  ws.send(JSON.stringify({ type: 'place_ship', cells: ship.cells }));
+  showWaitingForTeam('Statek wyslany', 'Czekaj, teraz kolej partnera na postawienie statku.');
+}
+
+function handleTeamShipPlaced(msg) {
+  onlineTeamShips.push({ cells: msg.cells });
+  if (msg.shipsPlaced >= msg.totalShips) {
+    showWaitingForTeam('Flota gotowa', 'Wasza flota jest gotowa. Czekamy na przeciwnikow...');
+    return;
+  }
+  if (msg.activeSeatIndex === mySeatIndex) {
+    startOnlineTeamShipTurn();
+  } else {
+    showWaitingForTeam('Kolej partnera', `Partner stawia statek ${msg.shipsPlaced + 1}/${msg.totalShips}. Czekaj na swoja kolej...`);
+  }
 }
 
 document.getElementById('btn-create').onclick = () => {
@@ -953,7 +1021,15 @@ function startOnlineSideGame() {
 }
 
 function updateOnlineTurnIndicator() {
-  document.getElementById('turn-indicator').textContent = myOnlineTurn ? 'Wasza tura - strzelajcie!' : 'Tura przeciwnikow...';
+  let text;
+  if (myOnlineTurn) {
+    text = 'Wasza tura - strzelajcie!';
+  } else if (onlineTurn === mySide) {
+    text = 'Tura partnera - czekaj...';
+  } else {
+    text = 'Tura przeciwnikow...';
+  }
+  document.getElementById('turn-indicator').textContent = text;
   pulseTurnIndicator();
 }
 
@@ -1030,7 +1106,8 @@ function applyOnlineSideFireResult(msg) {
   }
 
   onlineTurn = msg.nextTurn;
-  myOnlineTurn = onlineTurn === mySide;
+  onlineTurnSeat = msg.nextTurnSeat || 0;
+  myOnlineTurn = onlineTurn === mySide && (onlineSeatsForSide(mySide) < 2 || onlineTurnSeat === mySeatIndex);
   updateOnlineTurnIndicator();
 
   const gm = document.getElementById('game-message');
