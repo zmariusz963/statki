@@ -247,6 +247,7 @@ wss.on('connection', (ws) => {
       }
       room.ships[mySide] = msg.ships;
       room.ready[mySide] = true;
+      room.seats[mySide].forEach(seatWs => send(seatWs, { type: 'side_ships', ships: msg.ships }));
       broadcastRoom(room, { type: 'side_ready', side: mySide });
       maybeStartGame(room);
       return;
