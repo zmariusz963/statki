@@ -541,10 +541,20 @@ function refreshPlacementUI() {
   document.getElementById('btn-undo').classList.toggle('hidden', placementOrder.length === 0 && manualCells.length === 0);
 
   if (pending && !freeform) {
+    // Auto-preview the pending ship. The remembered position is only reused when the ship
+    // still actually fits there - otherwise (e.g. right after placing a ship on that very
+    // spot, which is what happens on touch devices where there is no pointer movement to
+    // refresh it) we jump to the first free anchor instead of showing a red overlapping ghost.
+    const shape = shipShapeVariant(def, currentVariant);
     let px = lastHoverX;
     let py = lastHoverY;
-    if (px === null) {
-      const anchor = firstFreeAnchor(shipShapeVariant(def, currentVariant), currentRotation, currentMirrored);
+    let fits = px !== null && py !== null;
+    if (fits) {
+      const cells = shapeCells(px, py, shape, currentRotation, currentMirrored);
+      fits = cellsInBounds(cells) && cells.every(([cx, cy]) => !hasConflict(cx, cy));
+    }
+    if (!fits) {
+      const anchor = firstFreeAnchor(shape, currentRotation, currentMirrored);
       px = anchor[0];
       py = anchor[1];
     }
