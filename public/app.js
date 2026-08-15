@@ -472,6 +472,18 @@ function hasConflict(x, y) {
   return false;
 }
 
+function firstFreeAnchor(shape, rotation, mirrored) {
+  for (let y = 0; y < BOARD_SIZE; y++) {
+    for (let x = 0; x < BOARD_SIZE; x++) {
+      const cells = shapeCells(x, y, shape, rotation, mirrored);
+      if (cellsInBounds(cells) && cells.every(([cx, cy]) => !hasConflict(cx, cy))) {
+        return [x, y];
+      }
+    }
+  }
+  return [0, 0];
+}
+
 function isAdjacentToAny(x, y, cells) {
   return cells.some(([cx, cy]) => Math.abs(cx - x) + Math.abs(cy - y) === 1);
 }
@@ -529,8 +541,13 @@ function refreshPlacementUI() {
   document.getElementById('btn-undo').classList.toggle('hidden', placementOrder.length === 0 && manualCells.length === 0);
 
   if (pending && !freeform) {
-    const px = lastHoverX !== null ? lastHoverX : 0;
-    const py = lastHoverY !== null ? lastHoverY : 0;
+    let px = lastHoverX;
+    let py = lastHoverY;
+    if (px === null) {
+      const anchor = firstFreeAnchor(shipShapeVariant(def, currentVariant), currentRotation, currentMirrored);
+      px = anchor[0];
+      py = anchor[1];
+    }
     previewShip(px, py);
   }
 }
