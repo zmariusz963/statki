@@ -296,7 +296,7 @@ wss.on('connection', (ws) => {
         broadcastSide(room, mySide, { type: 'side_ships', ships: partial });
         broadcastRoom(room, { type: 'side_ready', side: mySide });
         maybeStartGame(room);
-      } else {
+      } else if (seatsForSide === 2) {
         broadcastSide(room, mySide, {
           type: 'ship_placed',
           side: mySide,

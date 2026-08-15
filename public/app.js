@@ -970,7 +970,9 @@ function showWaitingForTeam(title, message) {
 }
 
 function onOnlineReady(ships) {
-  ws.send(JSON.stringify({ type: 'place_ships', ships }));
+  ships.forEach((ship) => {
+    ws.send(JSON.stringify({ type: 'place_ship', cells: ship.cells }));
+  });
   document.getElementById('btn-ready').disabled = true;
   document.getElementById('place-message').textContent = 'Czekamy na pozostalych graczy...';
 }
