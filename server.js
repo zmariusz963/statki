@@ -271,10 +271,31 @@ wss.on('connection', (ws) => {
     if (!room) return;
     const mySide = ws.side;
 
+    // Bulk placement: used ONLY by sides with exactly 1 human seat (1v1, 1vAI's human side).
+    // Fully independent from the 2-seat team placement below - no shared state, no turn-taking.
+    if (msg.type === 'place_ships') {
+      if (room.ready[mySide]) return;
+      const seatsForSide = mySide === 'A' ? room.seatsA : room.seatsB;
+      if (seatsForSide !== 1) return;
+      if (!validateShips(msg.ships)) {
+        send(ws, { type: 'error', message: 'Nieprawidlowe ustawienie statkow.' });
+        return;
+      }
+      room.ships[mySide] = msg.ships;
+      room.ready[mySide] = true;
+      send(ws, { type: 'side_ships', ships: msg.ships });
+      broadcastRoom(room, { type: 'side_ready', side: mySide });
+      maybeStartGame(room);
+      return;
+    }
+
+    // One-ship-at-a-time placement: used ONLY by sides with exactly 2 human seats (2v2, 2vai),
+    // alternating who places the next ship. Never used by 1-seat sides.
     if (msg.type === 'place_ship') {
       if (room.ready[mySide]) return;
       const seatsForSide = mySide === 'A' ? room.seatsA : room.seatsB;
-      if (seatsForSide === 2 && ws.seatIndex !== room.placeTurn[mySide]) {
+      if (seatsForSide !== 2) return;
+      if (ws.seatIndex !== room.placeTurn[mySide]) {
         send(ws, { type: 'error', message: 'Nie twoja kolej na stawianie statku.' });
         return;
       }
@@ -288,7 +309,7 @@ wss.on('connection', (ws) => {
       }
 
       partial.push({ cells: msg.cells });
-      if (seatsForSide === 2) room.placeTurn[mySide] = 1 - room.placeTurn[mySide];
+      room.placeTurn[mySide] = 1 - room.placeTurn[mySide];
 
       if (partial.length === SHIP_SIZES.length) {
         room.ships[mySide] = partial;
@@ -296,7 +317,7 @@ wss.on('connection', (ws) => {
         broadcastSide(room, mySide, { type: 'side_ships', ships: partial });
         broadcastRoom(room, { type: 'side_ready', side: mySide });
         maybeStartGame(room);
-      } else if (seatsForSide === 2) {
+      } else {
         broadcastSide(room, mySide, {
           type: 'ship_placed',
           side: mySide,

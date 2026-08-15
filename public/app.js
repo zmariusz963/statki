@@ -969,10 +969,10 @@ function showWaitingForTeam(title, message) {
   document.getElementById('btn-pass-continue').classList.add('hidden');
 }
 
+// Used only for 1-seat sides (1v1, 1vAI's human side). Sends the whole fleet at once,
+// independent from the 2-seat team placement flow below.
 function onOnlineReady(ships) {
-  ships.forEach((ship) => {
-    ws.send(JSON.stringify({ type: 'place_ship', cells: ship.cells }));
-  });
+  ws.send(JSON.stringify({ type: 'place_ships', ships }));
   document.getElementById('btn-ready').disabled = true;
   document.getElementById('place-message').textContent = 'Czekamy na pozostalych graczy...';
 }
