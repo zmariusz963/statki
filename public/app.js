@@ -879,13 +879,40 @@ function otherSideClient(s) {
   return s === 'A' ? 'B' : 'A';
 }
 
+let keepaliveTimer = null;
+
+// Shows a message on whichever screen the player is actually looking at. Without this,
+// disconnects and server errors were written to elements on other screens, so a player
+// stuck during placement saw no explanation at all - just an endless "waiting" message.
+function showOnlineStatus(text) {
+  const target = [
+    ['game', 'game-message'],
+    ['place', 'place-message'],
+    ['pass', 'pass-message'],
+    ['waiting', 'waiting-hint'],
+    ['lobby', 'lobby-message'],
+  ].find(([screen]) => screens[screen] && !screens[screen].classList.contains('hidden'));
+  if (target) document.getElementById(target[1]).textContent = text;
+}
+
 function connect() {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   ws = new WebSocket(`${proto}://${location.host}`);
   ws.onmessage = (event) => handleMessage(JSON.parse(event.data));
-  ws.onclose = () => {
-    document.getElementById('game-message').textContent = 'Polaczenie przerwane.';
-  };
+  // addEventListener, not onopen: the lobby buttons assign their own ws.onopen to send
+  // create/join, which would silently wipe out the keepalive if it lived there too.
+  ws.addEventListener('open', () => {
+    clearInterval(keepaliveTimer);
+    // Placement sends no traffic for minutes; without this the connection is dropped as idle.
+    keepaliveTimer = setInterval(() => {
+      if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'ping' }));
+    }, 20000);
+  });
+  ws.addEventListener('close', () => {
+    clearInterval(keepaliveTimer);
+    keepaliveTimer = null;
+    showOnlineStatus('Polaczenie przerwane. Wroc do menu i dolacz ponownie tym samym kodem.');
+  });
 }
 
 function handleMessage(msg) {
@@ -921,8 +948,10 @@ function handleMessage(msg) {
         updateOnlineWaitingHint(msg);
       }
       break;
+    case 'pong':
+      break;
     case 'error':
-      document.getElementById('lobby-message').textContent = msg.message;
+      showOnlineStatus(msg.message);
       break;
     case 'side_ready':
       if (msg.side === otherSideClient(mySide) && screens.place && !screens.place.classList.contains('hidden')) {
@@ -945,7 +974,7 @@ function handleMessage(msg) {
       applyOnlineSideFireResult(msg);
       break;
     case 'opponent_left':
-      document.getElementById('game-message').textContent = 'Ktos opuscil gre. Polaczenie przerwane.';
+      showOnlineStatus('Drugi gracz stracil polaczenie. Moze dolaczyc ponownie tym samym kodem.');
       break;
   }
 }

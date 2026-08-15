@@ -209,6 +209,13 @@ wss.on('connection', (ws) => {
       return;
     }
 
+    // Keepalive. Ship placement sends no traffic for minutes, and idle WebSocket
+    // connections get dropped by hosting proxies - which used to silently strand players.
+    if (msg.type === 'ping') {
+      send(ws, { type: 'pong' });
+      return;
+    }
+
     if (msg.type === 'create') {
       const { seatsA, seatsB, aiSide } = seatsConfigForMode(msg.mode);
       const code = makeRoomCode();
@@ -388,8 +395,16 @@ wss.on('connection', (ws) => {
     const room = rooms.get(ws.roomCode);
     if (!room) return;
     if (ws.side && ws.seatIndex !== null) room.seats[ws.side][ws.seatIndex] = null;
+
+    // Keep the room alive so one dropped phone (screen lock, app switch, flaky mobile
+    // network) does not wipe out everyone else's game. The freed seat stays open, so the
+    // player can rejoin with the same room code. Only drop the room once nobody is left.
+    const stillConnected = [...room.seats.A, ...room.seats.B].some(Boolean);
+    if (!stillConnected) {
+      rooms.delete(ws.roomCode);
+      return;
+    }
     broadcastRoom(room, { type: 'opponent_left' });
-    rooms.delete(ws.roomCode);
   });
 });
 
