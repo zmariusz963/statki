@@ -1452,8 +1452,16 @@ document.getElementById('btn-mode-2vai').onclick = () => {
 
 // Dev/test shortcut: skips manual placement entirely so changes to the game screen
 // can be checked immediately, with both fleets placed randomly.
+let selectedTestFaction = 'polska';
+document.querySelectorAll('.faction-flag-btn').forEach((btn) => {
+  btn.onclick = () => {
+    selectedTestFaction = btn.dataset.faction;
+    document.querySelectorAll('.faction-flag-btn').forEach((b) => b.classList.toggle('selected', b === btn));
+  };
+});
+
 function startTestMode() {
-  const myFaction = document.getElementById('test-faction').value;
+  const myFaction = selectedTestFaction;
   const otherFactions = Object.keys(SHIP_NAMES).filter(f => f !== myFaction);
   const enemyFaction = otherFactions[Math.floor(Math.random() * otherFactions.length)];
 

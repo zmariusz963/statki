@@ -237,17 +237,41 @@ input {
   transition: border-color 0.15s ease;
 }
 
-#test-faction {
+.faction-flags {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
   width: 100%;
   max-width: 300px;
-  padding: 12px;
-  font-size: 15px;
-  border-radius: 10px;
-  border: 1px solid #2b3a47;
+}
+
+.faction-flag-btn {
+  flex: 1;
+  max-width: none;
+  padding: 10px 0;
+  font-size: 26px;
+  line-height: 1;
   background: #131c25;
-  color: #e8edf2;
-  text-align: center;
+  border: 2px solid #2b3a47;
+  border-radius: 10px;
   box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.3);
+  opacity: 0.55;
+  transition: opacity 0.12s ease, border-color 0.12s ease, transform 0.08s ease;
+}
+
+.faction-flag-btn:hover {
+  opacity: 0.8;
+  filter: none;
+}
+
+.faction-flag-btn.selected {
+  opacity: 1;
+  border-color: #1d9e75;
+  box-shadow: 0 0 0 3px rgba(29, 158, 117, 0.18);
+}
+
+.faction-flag-btn:active {
+  transform: scale(0.94);
 }
 
 input:focus {
