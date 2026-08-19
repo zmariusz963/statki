@@ -3,7 +3,7 @@ const AudioEngine = (() => {
   let masterGain = null;
   let sfxGain = null;
   let convolver = null;
-  let muted = false;
+  let muted = true;
   let musicStarted = false;
   const bgMusic = document.getElementById('bg-music');
 
@@ -89,6 +89,9 @@ const AudioEngine = (() => {
     muted = !muted;
     masterGain.gain.setTargetAtTime(muted ? 0 : 1, ctx.currentTime, 0.05);
     if (bgMusic) bgMusic.muted = muted;
+    // Music starts muted by default and only begins playing the first time the
+    // player unmutes - no autoplay on an unrelated first click/tap anywhere on the page.
+    if (!muted) startMusic();
     return muted;
   }
 
@@ -172,25 +175,17 @@ const AudioEngine = (() => {
     thumpAt(t, sfxGain, 1);
   }
 
-  function armFirstInteractionStart() {
-    const start = () => {
-      startMusic();
-      document.removeEventListener('click', start);
-      document.removeEventListener('touchstart', start);
-      document.removeEventListener('touchend', start);
-    };
-    document.addEventListener('click', start);
-    document.addEventListener('touchstart', start);
-    document.addEventListener('touchend', start);
-
+  // Keeps the audio context alive for sound effects after any interaction, without
+  // autoplaying background music - that only starts when the player unmutes it.
+  function armFirstInteractionResume() {
     const resumeIfSuspended = () => {
       if (ctx && ctx.state === 'suspended') ctx.resume();
-      if (bgMusic && bgMusic.paused && musicStarted) bgMusic.play().catch(() => {});
+      if (bgMusic && bgMusic.paused && musicStarted && !muted) bgMusic.play().catch(() => {});
     };
     document.addEventListener('click', resumeIfSuspended);
     document.addEventListener('touchend', resumeIfSuspended);
   }
-  armFirstInteractionStart();
+  armFirstInteractionResume();
 
   return { startMusic, stopMusic, toggleMute, isMuted, playCannonShot, playSplash, playHitImpact, playExplosion };
 })();
