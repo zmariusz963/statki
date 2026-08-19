@@ -1,4 +1,4 @@
-const CACHE_NAME = 'statki-v12';
+const CACHE_NAME = 'statki-v13';
 
 const CORE_ASSETS = [
   '/',

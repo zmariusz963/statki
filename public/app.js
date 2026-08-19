@@ -178,6 +178,37 @@ function renderRemainingTally(containerId, sunkShipsList) {
   });
 }
 
+function renderFleetRoster(containerId, ships, isSunkFn, teamLabel) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  el.innerHTML = '';
+
+  if (teamLabel) {
+    const heading = document.createElement('div');
+    heading.className = 'fleet-roster-heading';
+    heading.textContent = `Flota: ${teamLabel}`;
+    el.appendChild(heading);
+  }
+
+  const icons = document.createElement('div');
+  icons.className = 'fleet-roster-icons';
+  ships.forEach((ship) => {
+    const sunk = isSunkFn ? isSunkFn(ship) : false;
+    const item = document.createElement('div');
+    item.className = 'fleet-roster-item' + (sunk ? ' sunk' : '');
+    item.title = (ship.vesselName || `${ship.cells.length}-masztowiec`) + (sunk ? ' (zatopiony)' : '');
+    item.appendChild(renderLegendMini(ship.cells, sunk ? 'sunk' : ''));
+    if (ship.vesselName) {
+      const label = document.createElement('div');
+      label.className = 'fleet-roster-name';
+      label.textContent = ship.vesselName;
+      item.appendChild(label);
+    }
+    icons.appendChild(item);
+  });
+  el.appendChild(icons);
+}
+
 function renderSunkTally(containerId, sunkShipsList) {
   const el = document.getElementById(containerId);
   if (!el) return;
@@ -1170,6 +1201,7 @@ function renderOnlineSideBoards() {
     getCellContent: (x, y) => symbolForState(myHits[`${x},${y}`]),
   });
   renderShipOverlays(ownGrid, onlineOwnShips || [], (ship) => ship.cells.every(([x, y]) => myHits[`${x},${y}`] === 'sunk'));
+  renderFleetRoster('fleet-roster', onlineOwnShips || [], (ship) => ship.cells.every(([x, y]) => myHits[`${x},${y}`] === 'sunk'));
 }
 
 function fireOnlineSide(x, y) {
@@ -1408,6 +1440,7 @@ function renderSideBoards(shooter, interactive) {
     getCellContent: (x, y) => side.hits[shooter].has(`${x},${y}`) ? symbolForState(cellStateSide(shooter, x, y)) : '',
   });
   renderShipOverlays(ownGrid, side.ships[shooter], (ship) => shipFullySunkSide(shooter, ship));
+  renderFleetRoster('fleet-roster', side.ships[shooter], (ship) => shipFullySunkSide(shooter, ship));
 }
 
 function fireSide(x, y, shooter, target) {
