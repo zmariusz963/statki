@@ -661,6 +661,16 @@ input:focus {
   fill: #6d8194;
 }
 
+.ship-gun-barrel {
+  stroke: #8a9aa8;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.ship-gun-muzzle {
+  fill: #2f76bd;
+}
+
 .ship-overlay.sunk .ship-hull {
   fill: #993c1d;
 }
@@ -673,7 +683,16 @@ input:focus {
   fill: #b0451f;
 }
 
+.ship-overlay.sunk .ship-gun-barrel {
+  stroke: #b0451f;
+}
+
+.ship-overlay.sunk .ship-gun-muzzle {
+  fill: #712b13;
+}
+
 .ship-single-dot {
+  position: relative;
   width: 55%;
   height: 55%;
   border-radius: 50%;
@@ -683,6 +702,21 @@ input:focus {
 
 .ship-overlay.sunk .ship-single-dot {
   background: #993c1d;
+}
+
+.ship-single-barrel {
+  position: absolute;
+  top: 4%;
+  left: 50%;
+  width: 14%;
+  height: 42%;
+  margin-left: -7%;
+  background: #8a9aa8;
+  border-radius: 2px;
+}
+
+.ship-overlay.sunk .ship-single-barrel {
+  background: #b0451f;
 }
 
 .ship-segment .seg-inner {
@@ -695,6 +729,36 @@ input:focus {
 
 .ship-overlay.sunk .seg-inner {
   background: #993c1d;
+}
+
+.seg-barrel {
+  position: absolute;
+  top: 12%;
+  left: 50%;
+  width: 12%;
+  height: 38%;
+  margin-left: -6%;
+  background: #8a9aa8;
+  border-radius: 2px;
+}
+
+.seg-turret {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 30%;
+  height: 30%;
+  margin: -15% 0 0 -15%;
+  border-radius: 50%;
+  background: #38495a;
+}
+
+.ship-overlay.sunk .seg-barrel {
+  background: #b0451f;
+}
+
+.ship-overlay.sunk .seg-turret {
+  background: #712b13;
 }
 
 .sink-burst {

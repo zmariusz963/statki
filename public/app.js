@@ -207,6 +207,10 @@ function shipSVGMarkup(size, horizontal) {
     const t = (i + 1) / (turretCount + 1);
     const cx = horizontal ? len * t : 20;
     const cy = horizontal ? 20 : len * t;
+    const gunX = horizontal ? cx : cx - 9;
+    const gunY = horizontal ? cy - 9 : cy;
+    turrets += `<line x1="${cx}" y1="${cy}" x2="${gunX}" y2="${gunY}" class="ship-gun-barrel" />`;
+    turrets += `<circle cx="${gunX}" cy="${gunY}" r="1.3" class="ship-gun-muzzle" />`;
     turrets += `<circle cx="${cx}" cy="${cy}" r="5" class="ship-turret" />`;
   }
   const hullPoints = horizontal
@@ -241,7 +245,7 @@ function renderShipOverlays(gridEl, ships, isSunkFn) {
       el.style.width = `${cellPct()}%`;
       el.style.height = `${cellPct()}%`;
       el.style.animationDelay = `${(Math.random() * -3).toFixed(2)}s`;
-      el.innerHTML = '<div class="ship-single-dot"></div>';
+      el.innerHTML = '<div class="ship-single-dot"><div class="ship-single-barrel"></div></div>';
       gridEl.appendChild(el);
     } else if (isStraightLine(cells)) {
       const xs = cells.map(c => c[0]), ys = cells.map(c => c[1]);
@@ -267,7 +271,7 @@ function renderShipOverlays(gridEl, ships, isSunkFn) {
         seg.style.width = `${cellPct()}%`;
         seg.style.height = `${cellPct()}%`;
         seg.style.animationDelay = segDelay;
-        seg.innerHTML = '<div class="seg-inner"></div>';
+        seg.innerHTML = '<div class="seg-inner"><div class="seg-barrel"></div><div class="seg-turret"></div></div>';
         gridEl.appendChild(seg);
       });
     }
