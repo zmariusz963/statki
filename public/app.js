@@ -1420,3 +1420,20 @@ document.getElementById('btn-mode-1vai').onclick = () => {
 document.getElementById('btn-mode-2vai').onclick = () => {
   startSideMode('Gracz 1 i Gracz 2', 'Komputer', true);
 };
+
+// Dev/test shortcut: skips manual placement entirely so changes to the game screen
+// can be checked immediately, with both fleets placed randomly.
+function startTestMode() {
+  side.labelA = 'Gracz (test)';
+  side.labelB = 'Komputer';
+  side.bIsAI = true;
+  side.ships = { A: randomAIFleet(), B: randomAIFleet() };
+  side.hits = { A: new Set(), B: new Set() };
+  side.turn = 'A';
+  aiTargetQueue = [];
+  startSideTurn();
+}
+
+document.getElementById('btn-mode-test').onclick = () => {
+  startTestMode();
+};
