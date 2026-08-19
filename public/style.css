@@ -237,6 +237,19 @@ input {
   transition: border-color 0.15s ease;
 }
 
+#test-faction {
+  width: 100%;
+  max-width: 300px;
+  padding: 12px;
+  font-size: 15px;
+  border-radius: 10px;
+  border: 1px solid #2b3a47;
+  background: #131c25;
+  color: #e8edf2;
+  text-align: center;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
 input:focus {
   outline: none;
   border-color: #1d9e75;
@@ -485,6 +498,18 @@ input:focus {
   border-radius: 5px;
   background: #0c1319;
   border: 1px solid #2b3a47;
+  max-width: 64px;
+}
+
+.sunk-tally-icon-name {
+  margin-top: 3px;
+  font-size: 8px;
+  line-height: 1.2;
+  color: #93a3b0;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .ship-legend-mini.sunk .ship-legend-mini-cell.filled {

@@ -36,6 +36,21 @@ const SHIP_DEFS = [
   { name: 'Jednomasztowiec 4', shape: [[0, 0]] },
 ];
 
+// Historyczne nazwy okretow, jedna lista na frakcje, w kolejnosci SHIP_DEFS
+// (test mode only - dev feature for naming ships by nation).
+const SHIP_NAMES = {
+  polska: ['ORP Blyskawica', 'ORP Grom', 'ORP Wicher', 'ORP Burza', 'ORP Kujawiak', 'ORP Slazak', 'ORP Sep', 'ORP Rys', 'ORP Zbik', 'ORP Wilk'],
+  niemcy: ['Bismarck', 'Tirpitz', 'Scharnhorst', 'Gneisenau', 'Prinz Eugen', 'Admiral Graf Spee', 'Admiral Scheer', 'Deutschland', 'Emden', 'Konigsberg'],
+  anglia: ['HMS Hood', 'HMS Prince of Wales', 'HMS King George V', 'HMS Rodney', 'HMS Nelson', 'HMS Warspite', 'HMS Ark Royal', 'HMS Dreadnought', 'HMS Victory', 'HMS Belfast'],
+  rosja: ['Aurora', 'Potiomkin', 'Warjag', 'Marat', 'Piotr Wielki', 'Moskwa', 'Kirow', 'Gangut', 'Sewastopol', 'Slawa'],
+};
+const FACTION_LABELS = { polska: 'Polska', niemcy: 'Niemcy', anglia: 'Anglia', rosja: 'Rosja' };
+
+function nameFleet(ships, faction) {
+  const names = SHIP_NAMES[faction] || SHIP_NAMES.polska;
+  return ships.map((ship, i) => ({ ...ship, vesselName: names[i] || `Okret ${i + 1}`, faction }));
+}
+
 const screens = {
   lobby: document.getElementById('screen-lobby'),
   onlineMode: document.getElementById('screen-online-mode'),
@@ -159,8 +174,16 @@ function renderSunkTally(containerId, sunkShipsList) {
   sunkShipsList.forEach((ship) => {
     const item = document.createElement('div');
     item.className = 'sunk-tally-icon-item';
-    item.title = `Zatopiony ${ship.cells.length}-masztowiec`;
+    item.title = ship.vesselName
+      ? `${ship.vesselName} (${ship.cells.length}-masztowiec)`
+      : `Zatopiony ${ship.cells.length}-masztowiec`;
     item.appendChild(renderLegendMini(ship.cells, 'sunk'));
+    if (ship.vesselName) {
+      const label = document.createElement('div');
+      label.className = 'sunk-tally-icon-name';
+      label.textContent = ship.vesselName;
+      item.appendChild(label);
+    }
     icons.appendChild(item);
   });
   el.appendChild(icons);
@@ -1399,13 +1422,15 @@ function fireSide(x, y, shooter, target) {
 
   if (allSunk) {
     const gm = document.getElementById('game-message');
-    gm.textContent = 'Zatopiony ostatni statek!';
+    gm.textContent = hitShip.vesselName ? `Zatopiony ostatni statek: ${hitShip.vesselName}!` : 'Zatopiony ostatni statek!';
     gm.classList.add('game-over-banner');
     document.getElementById('turn-indicator').textContent = `ZWYCIEZCA: ${sideLabel(shooter)}!`;
     return;
   }
 
-  document.getElementById('game-message').textContent = isHit ? (shipJustSunk ? 'Zatopiony!' : 'Trafienie!') : 'Pudlo.';
+  document.getElementById('game-message').textContent = isHit
+    ? (shipJustSunk ? (hitShip.vesselName ? `Zatopiony: ${hitShip.vesselName}!` : 'Zatopiony!') : 'Trafienie!')
+    : 'Pudlo.';
 
   side.turn = target;
   setTimeout(() => {
@@ -1428,10 +1453,17 @@ document.getElementById('btn-mode-2vai').onclick = () => {
 // Dev/test shortcut: skips manual placement entirely so changes to the game screen
 // can be checked immediately, with both fleets placed randomly.
 function startTestMode() {
-  side.labelA = 'Gracz (test)';
-  side.labelB = 'Komputer';
+  const myFaction = document.getElementById('test-faction').value;
+  const otherFactions = Object.keys(SHIP_NAMES).filter(f => f !== myFaction);
+  const enemyFaction = otherFactions[Math.floor(Math.random() * otherFactions.length)];
+
+  side.labelA = `Gracz (test, ${FACTION_LABELS[myFaction]})`;
+  side.labelB = `Komputer (${FACTION_LABELS[enemyFaction]})`;
   side.bIsAI = true;
-  side.ships = { A: randomAIFleet(), B: randomAIFleet() };
+  side.ships = {
+    A: nameFleet(randomAIFleet(), myFaction),
+    B: nameFleet(randomAIFleet(), enemyFaction),
+  };
   side.hits = { A: new Set(), B: new Set() };
   side.turn = 'A';
   aiTargetQueue = [];
