@@ -146,21 +146,24 @@ function renderSunkTally(containerId, sunkShipsList) {
   const el = document.getElementById(containerId);
   if (!el) return;
   const totalCounts = fleetSizeCounts();
-  const sunkCounts = {};
-  sunkShipsList.forEach(ship => {
-    const size = ship.cells.length;
-    sunkCounts[size] = (sunkCounts[size] || 0) + 1;
-  });
-  const sizes = Object.keys(totalCounts).map(Number).sort((a, b) => b - a);
+  const totalShips = Object.values(totalCounts).reduce((a, b) => a + b, 0);
   el.innerHTML = '';
-  sizes.forEach(size => {
-    const sunk = sunkCounts[size] || 0;
-    const total = totalCounts[size];
-    const row = document.createElement('tr');
-    if (sunk === total) row.classList.add('all-sunk');
-    row.innerHTML = `<td class="sunk-tally-size">${size}-masztowe</td><td class="sunk-tally-count">${sunk}/${total}</td>`;
-    el.appendChild(row);
+
+  const summary = document.createElement('div');
+  summary.className = 'sunk-tally-summary';
+  summary.textContent = `Zatopione: ${sunkShipsList.length}/${totalShips}`;
+  el.appendChild(summary);
+
+  const icons = document.createElement('div');
+  icons.className = 'sunk-tally-icons';
+  sunkShipsList.forEach((ship) => {
+    const item = document.createElement('div');
+    item.className = 'sunk-tally-icon-item';
+    item.title = `Zatopiony ${ship.cells.length}-masztowiec`;
+    item.appendChild(renderLegendMini(ship.cells, 'sunk'));
+    icons.appendChild(item);
   });
+  el.appendChild(icons);
 }
 
 function shapeBoundingBox(shape) {
