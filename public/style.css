@@ -518,16 +518,16 @@ input:focus {
 }
 
 .sunk-tally-icon-item {
-  padding: 3px;
-  border-radius: 5px;
+  padding: 4px;
+  border-radius: 6px;
   background: #0c1319;
   border: 1px solid #2b3a47;
-  max-width: 64px;
+  max-width: 84px;
 }
 
 .sunk-tally-icon-name {
-  margin-top: 3px;
-  font-size: 8px;
+  margin-top: 4px;
+  font-size: 9px;
   line-height: 1.2;
   color: #93a3b0;
   text-align: center;
@@ -538,6 +538,43 @@ input:focus {
 
 .ship-legend-mini.sunk .ship-legend-mini-cell.filled {
   background: #993c1d;
+}
+
+.remaining-tally-table {
+  align-self: flex-end;
+  border-collapse: collapse;
+  background: linear-gradient(180deg, #16212b, #101923);
+  border-radius: 10px;
+  border: 1px solid #263543;
+  overflow: hidden;
+}
+
+.remaining-tally-table td {
+  padding: 5px 8px;
+  font-size: 11px;
+  color: #93a3b0;
+  border-bottom: 1px solid #263543;
+  white-space: nowrap;
+}
+
+.remaining-tally-table tr:last-child td {
+  border-bottom: none;
+}
+
+.remaining-tally-size {
+  font-weight: 500;
+}
+
+.remaining-tally-count {
+  font-weight: 700;
+  color: #cddce6;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.remaining-tally-table tr.none-left td {
+  opacity: 0.4;
+  text-decoration: line-through;
 }
 
 .turn-indicator {

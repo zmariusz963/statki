@@ -157,6 +157,27 @@ function fleetSizeCounts() {
   return counts;
 }
 
+function renderRemainingTally(containerId, sunkShipsList) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  const totalCounts = fleetSizeCounts();
+  const sunkCounts = {};
+  sunkShipsList.forEach((ship) => {
+    const size = ship.cells.length;
+    sunkCounts[size] = (sunkCounts[size] || 0) + 1;
+  });
+  const sizes = Object.keys(totalCounts).map(Number).sort((a, b) => b - a);
+  el.innerHTML = '';
+  sizes.forEach((size) => {
+    const total = totalCounts[size];
+    const remaining = total - (sunkCounts[size] || 0);
+    const row = document.createElement('tr');
+    if (remaining === 0) row.classList.add('none-left');
+    row.innerHTML = `<td class="remaining-tally-size">${size}-masztowe</td><td class="remaining-tally-count">${remaining}/${total}</td>`;
+    el.appendChild(row);
+  });
+}
+
 function renderSunkTally(containerId, sunkShipsList) {
   const el = document.getElementById(containerId);
   if (!el) return;
@@ -177,7 +198,7 @@ function renderSunkTally(containerId, sunkShipsList) {
     item.title = ship.vesselName
       ? `${ship.vesselName} (${ship.cells.length}-masztowiec)`
       : `Zatopiony ${ship.cells.length}-masztowiec`;
-    item.appendChild(renderLegendMini(ship.cells, 'sunk'));
+    item.appendChild(renderLegendMini(ship.cells, 'sunk', 15));
     if (ship.vesselName) {
       const label = document.createElement('div');
       label.className = 'sunk-tally-icon-name';
@@ -379,17 +400,22 @@ function spawnProjectile(gridEl, x, y) {
   setTimeout(() => shell.remove(), 380);
 }
 
-function renderLegendMini(shape, extraClass) {
+function renderLegendMini(shape, extraClass, cellSize) {
+  const size = cellSize || 9;
   const { w, h, minX, minY } = shapeBoundingBox(shape);
   const wrap = document.createElement('div');
   wrap.className = 'ship-legend-mini' + (extraClass ? ' ' + extraClass : '');
-  wrap.style.gridTemplateColumns = `repeat(${w}, 9px)`;
-  wrap.style.gridTemplateRows = `repeat(${h}, 9px)`;
+  wrap.style.gridTemplateColumns = `repeat(${w}, ${size}px)`;
+  wrap.style.gridTemplateRows = `repeat(${h}, ${size}px)`;
   const filled = new Set(shape.map(([x, y]) => `${x - minX},${y - minY}`));
   for (let yy = 0; yy < h; yy++) {
     for (let xx = 0; xx < w; xx++) {
       const cell = document.createElement('div');
       cell.className = 'ship-legend-mini-cell' + (filled.has(`${xx},${yy}`) ? ' filled' : '');
+      if (cellSize) {
+        cell.style.width = `${size}px`;
+        cell.style.height = `${size}px`;
+      }
       wrap.appendChild(cell);
     }
   }
@@ -1131,6 +1157,7 @@ function renderOnlineSideBoards() {
   });
   renderShipOverlays(enemyGrid, onlineSunkShips[target], () => true);
   renderSunkTally('sunk-tally', onlineSunkShips[target]);
+  renderRemainingTally('remaining-tally', onlineSunkShips[target]);
 
   const myHits = onlineHits[mySide];
   const ownShipCells = shipCellSet(onlineOwnShips || []);
@@ -1369,6 +1396,7 @@ function renderSideBoards(shooter, interactive) {
   const sunkTargetShips = side.ships[target].filter(ship => shipFullySunkSide(target, ship));
   renderShipOverlays(enemyGrid, sunkTargetShips, () => true);
   renderSunkTally('sunk-tally', sunkTargetShips);
+  renderRemainingTally('remaining-tally', sunkTargetShips);
 
   const ownShipCells = shipCellSet(side.ships[shooter]);
   const ownGrid = buildBoard('own-board', {
@@ -1406,6 +1434,7 @@ function fireSide(x, y, shooter, target) {
   const sunkTargetShips = side.ships[target].filter(ship => shipFullySunkSide(target, ship));
   renderShipOverlays(enemyGrid, sunkTargetShips, () => true);
   renderSunkTally('sunk-tally', sunkTargetShips);
+  renderRemainingTally('remaining-tally', sunkTargetShips);
   triggerCellAnimation('enemy-board', x, y, isHit);
 
   if (shipJustSunk) {
